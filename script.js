@@ -24,6 +24,8 @@
   const deviceChipFront = document.querySelector("[data-device-chip-front]");
   const deviceChipBack = document.querySelector("[data-device-chip-back]");
   const desktopQuery = window.matchMedia("(min-width: 981px)");
+  const deviceFlipDuration = 0.64;
+  const deviceFaceSwitchOffset = deviceFlipDuration / 2;
 
   const setText = (element, value) => {
     if (element && element.textContent !== value) {
@@ -52,6 +54,16 @@
       syncDeviceFace(deviceWordBack, deviceChipBack, activeIndex);
       syncDeviceFace(deviceWordFront, deviceChipFront, neighborIndex);
     }
+  };
+
+  const syncDeviceWordsFromTime = (time, direction = 1) => {
+    const activeIndex = gsap.utils.clamp(
+      0,
+      panelWords.length - 1,
+      Math.floor(time - deviceFaceSwitchOffset)
+    );
+
+    syncDeviceWords(activeIndex, direction);
   };
 
   gsap.from("[data-animate='header']", {
@@ -99,8 +111,8 @@
         pin: ".story-pin",
         anticipatePin: 1,
         onUpdate: (self) => {
-          const index = Math.round(self.progress * Math.max(panels.length - 1, 1));
-          syncDeviceWords(index, self.direction || 1);
+          const time = self.animation ? self.animation.time() : 0;
+          syncDeviceWordsFromTime(time, self.direction || 1);
         },
       },
     });
@@ -127,7 +139,7 @@
         );
       }
 
-      storyTimeline.to("[data-device]", { ...state, duration: 0.64 }, at);
+      storyTimeline.to("[data-device]", { ...state, duration: deviceFlipDuration }, at);
       storyTimeline.to(".device-line", { scaleX: 0.55 + index * 0.08, duration: 0.48 }, at);
       storyTimeline.to(".showcase-grid", { rotateZ: index % 2 === 0 ? 0.5 : -0.5, duration: 0.48 }, at);
 
