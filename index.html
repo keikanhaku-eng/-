@@ -25,10 +25,12 @@
     <header class="site-header" data-animate="header">
       <a class="brand" href="#top" aria-label="ページ上部へ">Kei</a>
       <nav class="site-nav" aria-label="ページ内ナビゲーション">
-        <a href="#profile">Profile</a>
-        <a href="#skills">Skills</a>
-        <a href="#strengths">Strengths</a>
-        <a href="#goal">Goal</a>
+        <a href="#top">TOP</a>
+        <a href="#profile">プロフィール</a>
+        <a href="#hobby">好きなもの</a>
+        <a href="#career">経歴</a>
+        <a href="https://souken-sys-intra.com/introduction/shinjin/2026/2026.php">2026年度</a>
+        <a href="https://souken-sys-intra.com/AMS/shinjin.php">年度別一覧</a>
       </nav>
     </header>
 
@@ -102,7 +104,7 @@
                   <div class="device-line line-three"></div>
                   <div class="device-axis"></div>
                   <div class="device-chip" data-device-chip-back>02</div>
-                  <div class="device-word" data-device-word-back>Background</div>
+                  <div class="device-word" data-device-word-back>Hobby</div>
                 </div>
               </div>
             </div>
@@ -114,8 +116,9 @@
           </aside>
 
           <div class="story-panels">
-            <article id="profile" class="story-panel" data-panel="profile">
-              <h2>はじめまして。</h2>
+            <article id="profile" class="story-panel" data-panel="profile" data-word="Profile">
+              <p class="section-kicker">Profile</p>
+              <h2>プロフィール</h2>
               <div class="body-copy">
                 <p>
                   中国出身の敬涵博（ケイ）です。日本で情報処理を学び、ITパスポート、
@@ -128,9 +131,10 @@
               </div>
             </article>
 
-            <article class="story-panel" data-panel="background">
+            <article id="career" class="story-panel" data-panel="career" data-word="Career">
+              <p class="section-kicker">Career</p>
               
-              <h2>異なる環境で学んできたこと</h2>
+              <h2>経歴</h2>
               <div class="body-copy">
                 <p>
                   来日後、専門学校で情報処理を学びました。学習だけでなく、
@@ -143,7 +147,7 @@
               </div>
             </article>
 
-            <article id="skills" class="story-panel" data-panel="skills">
+            <article id="skills" class="story-panel" data-panel="skills" hidden>
               
               <h2>資格と現在学んでいる技術</h2>
               <div class="tag-grid" aria-label="資格と技術一覧">
@@ -158,7 +162,7 @@
               </div>
             </article>
 
-            <article id="strengths" class="story-panel" data-panel="strengths">
+            <article id="strengths" class="story-panel" data-panel="strengths" hidden>
               
               <h2>仕事で活かしたい強み</h2>
               <div class="card-grid">
@@ -180,9 +184,10 @@
               </div>
             </article>
 
-            <article class="story-panel" data-panel="hobby">
+            <article id="hobby" class="story-panel" data-panel="hobby" data-word="Hobby">
             
-              <h2>人となりが伝わる時間</h2>
+              <p class="section-kicker">Hobby</p>
+              <h2>好きなもの</h2>
               <div class="body-copy">
                 <p>
                   仕事以外では、料理、Jazz、映画、ゲーム、筋トレ、AI関連の情報を見ることが好きです。
@@ -195,7 +200,7 @@
               </div>
             </article>
 
-            <article id="goal" class="story-panel" data-panel="goal">
+            <article id="goal" class="story-panel" data-panel="goal" hidden>
             
               <h2>今後の目標</h2>
               <div class="body-copy">

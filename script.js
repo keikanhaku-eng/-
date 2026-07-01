@@ -14,10 +14,13 @@
   gsap.registerPlugin(ScrollTrigger);
   gsap.defaults({ ease: "power2.out", duration: 0.8 });
 
-  const panels = gsap.utils.toArray(".story-panel");
+  const panelOrder = ["profile", "hobby", "career"];
+  const panels = panelOrder
+    .map((name) => document.querySelector(`.story-panel[data-panel="${name}"]`))
+    .filter(Boolean);
   const panelWords = panels.map((panel) => {
     const label = panel.querySelector(".section-kicker");
-    return (label?.textContent || panel.dataset.panel || "Story").trim();
+    return (panel.dataset.word || label?.textContent || panel.dataset.panel || "Story").trim();
   });
   const deviceWordFront = document.querySelector("[data-device-word-front]");
   const deviceWordBack = document.querySelector("[data-device-word-back]");
