@@ -15,7 +15,44 @@
   gsap.defaults({ ease: "power2.out", duration: 0.8 });
 
   const panels = gsap.utils.toArray(".story-panel");
+  const panelWords = panels.map((panel) => {
+    const label = panel.querySelector(".section-kicker");
+    return (label?.textContent || panel.dataset.panel || "Story").trim();
+  });
+  const deviceWordFront = document.querySelector("[data-device-word-front]");
+  const deviceWordBack = document.querySelector("[data-device-word-back]");
+  const deviceChipFront = document.querySelector("[data-device-chip-front]");
+  const deviceChipBack = document.querySelector("[data-device-chip-back]");
   const desktopQuery = window.matchMedia("(min-width: 981px)");
+
+  const setText = (element, value) => {
+    if (element && element.textContent !== value) {
+      element.textContent = value;
+    }
+  };
+
+  const syncDeviceFace = (wordElement, chipElement, index) => {
+    const clampedIndex = gsap.utils.clamp(0, panelWords.length - 1, index);
+    setText(wordElement, panelWords[clampedIndex]);
+    setText(chipElement, String(clampedIndex + 1).padStart(2, "0"));
+  };
+
+  const syncDeviceWords = (index, direction = 1) => {
+    const activeIndex = gsap.utils.clamp(0, panelWords.length - 1, index);
+    const neighborIndex = gsap.utils.clamp(
+      0,
+      panelWords.length - 1,
+      activeIndex + (direction >= 0 ? 1 : -1)
+    );
+
+    if (activeIndex % 2 === 0) {
+      syncDeviceFace(deviceWordFront, deviceChipFront, activeIndex);
+      syncDeviceFace(deviceWordBack, deviceChipBack, neighborIndex);
+    } else {
+      syncDeviceFace(deviceWordBack, deviceChipBack, activeIndex);
+      syncDeviceFace(deviceWordFront, deviceChipFront, neighborIndex);
+    }
+  };
 
   gsap.from("[data-animate='header']", {
     y: -28,
@@ -49,7 +86,8 @@
 
   if (desktopQuery.matches) {
     gsap.set(panels[0], { autoAlpha: 1, yPercent: -50, y: 0, filter: "blur(0px)" });
-    gsap.set("[data-device]", { rotateX: 4, rotateY: -16, rotateZ: 0 });
+    gsap.set("[data-device]", { rotateX: 4, rotateY: 0, rotateZ: 0 });
+    syncDeviceWords(0, 1);
 
     const storyTimeline = gsap.timeline({
       defaults: { ease: "none" },
@@ -60,17 +98,19 @@
         scrub: 1,
         pin: ".story-pin",
         anticipatePin: 1,
+        onUpdate: (self) => {
+          const index = Math.round(self.progress * Math.max(panels.length - 1, 1));
+          syncDeviceWords(index, self.direction || 1);
+        },
       },
     });
 
-    const deviceStates = [
-      { rotateX: 4, rotateY: -16, rotateZ: 0, scale: 1 },
-      { rotateX: -2, rotateY: 12, rotateZ: -1, scale: 0.97 },
-      { rotateX: 8, rotateY: 20, rotateZ: 1.5, scale: 1.03 },
-      { rotateX: -8, rotateY: -22, rotateZ: -2, scale: 0.94 },
-      { rotateX: 10, rotateY: 8, rotateZ: 2, scale: 1.02 },
-      { rotateX: 0, rotateY: 0, rotateZ: 0, scale: 1.06 },
-    ];
+    const deviceStates = panels.map((_, index) => ({
+      rotateX: 4,
+      rotateY: index * 180,
+      rotateZ: 0,
+      scale: 1,
+    }));
 
     panels.forEach((panel, index) => {
       const at = index;
