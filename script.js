@@ -18,17 +18,30 @@
   const panels = panelOrder
     .map((name) => document.querySelector(`.story-panel[data-panel="${name}"]`))
     .filter(Boolean);
-  const panelWords = panels.map((panel) => {
+  const pageSteps = panels.flatMap((panel, panelIndex) => {
     const label = panel.querySelector(".section-kicker");
-    return (panel.dataset.word || label?.textContent || panel.dataset.panel || "Story").trim();
+    const word = (panel.dataset.word || label?.textContent || panel.dataset.panel || "Story").trim();
+    const pages = gsap.utils.toArray(panel.querySelectorAll("[data-page]"));
+
+    return pages.map((page, pageIndex) => ({
+      panel,
+      page,
+      panelIndex,
+      pageIndex,
+      word: (page.dataset.word || word).trim(),
+      image: page.dataset.image || `test${panelIndex + 1}.png`,
+    }));
   });
   const deviceWordFront = document.querySelector("[data-device-word-front]");
   const deviceWordBack = document.querySelector("[data-device-word-back]");
   const deviceChipFront = document.querySelector("[data-device-chip-front]");
   const deviceChipBack = document.querySelector("[data-device-chip-back]");
+  const devicePhotoFront = document.querySelector("[data-device-photo-front]");
+  const devicePhotoBack = document.querySelector("[data-device-photo-back]");
   const desktopQuery = window.matchMedia("(min-width: 981px)");
   const deviceFlipDuration = 0.64;
   const deviceFaceSwitchOffset = deviceFlipDuration / 2;
+  const maxStepIndex = Math.max(pageSteps.length - 1, 0);
 
   const setText = (element, value) => {
     if (element && element.textContent !== value) {
@@ -36,33 +49,59 @@
     }
   };
 
-  const syncDeviceFace = (wordElement, chipElement, index) => {
-    const clampedIndex = gsap.utils.clamp(0, panelWords.length - 1, index);
-    setText(wordElement, panelWords[clampedIndex]);
-    setText(chipElement, String(clampedIndex + 1).padStart(2, "0"));
+  const setImage = (element, value) => {
+    if (!element) return;
+
+    if (element.getAttribute("src") !== value) {
+      element.dataset.failedSrc = "";
+      element.hidden = false;
+      element.setAttribute("src", value);
+      return;
+    }
+
+    element.hidden = element.dataset.failedSrc === value || (element.complete && element.naturalWidth === 0);
+  };
+
+  [devicePhotoFront, devicePhotoBack].forEach((image) => {
+    if (!image) return;
+    image.addEventListener("error", () => {
+      image.dataset.failedSrc = image.getAttribute("src") || "";
+      image.hidden = true;
+    });
+  });
+
+  const syncDeviceFace = (wordElement, chipElement, imageElement, index) => {
+    const clampedIndex = gsap.utils.clamp(0, maxStepIndex, index);
+    const step = pageSteps[clampedIndex];
+
+    if (!step) return;
+
+    setText(wordElement, step.word);
+    setText(chipElement, String(step.pageIndex + 1).padStart(2, "0"));
+    setImage(imageElement, step.image);
   };
 
   const syncDeviceWords = (index, direction = 1) => {
-    const activeIndex = gsap.utils.clamp(0, panelWords.length - 1, index);
+    const activeIndex = gsap.utils.clamp(0, maxStepIndex, index);
     const neighborIndex = gsap.utils.clamp(
       0,
-      panelWords.length - 1,
+      maxStepIndex,
       activeIndex + (direction >= 0 ? 1 : -1)
     );
 
     if (activeIndex % 2 === 0) {
-      syncDeviceFace(deviceWordFront, deviceChipFront, activeIndex);
-      syncDeviceFace(deviceWordBack, deviceChipBack, neighborIndex);
+      syncDeviceFace(deviceWordFront, deviceChipFront, devicePhotoFront, activeIndex);
+      syncDeviceFace(deviceWordBack, deviceChipBack, devicePhotoBack, neighborIndex);
     } else {
-      syncDeviceFace(deviceWordBack, deviceChipBack, activeIndex);
-      syncDeviceFace(deviceWordFront, deviceChipFront, neighborIndex);
+      syncDeviceFace(deviceWordBack, deviceChipBack, devicePhotoBack, activeIndex);
+      syncDeviceFace(deviceWordFront, deviceChipFront, devicePhotoFront, neighborIndex);
     }
   };
 
   const syncDeviceWordsFromTime = (time, direction = 1) => {
     const activeIndex = gsap.utils.clamp(
       0,
-      panelWords.length - 1,
+      maxStepIndex,
       Math.floor(time - deviceFaceSwitchOffset)
     );
 
@@ -100,7 +139,13 @@
     .to("[data-layer='back']", { x: -88, y: 50, rotateY: -28, duration: 0.62 }, 0.38);
 
   if (desktopQuery.matches) {
-    gsap.set(panels[0], { autoAlpha: 1, yPercent: -50, y: 0, filter: "blur(0px)" });
+    gsap.set(panels, { autoAlpha: 0, yPercent: -50, y: 0, filter: "blur(16px)" });
+    gsap.set(
+      pageSteps.map((step) => step.page),
+      { autoAlpha: 0, y: 26, filter: "blur(12px)" }
+    );
+    gsap.set(pageSteps[0]?.panel, { autoAlpha: 1, yPercent: -50, y: 0, filter: "blur(0px)" });
+    gsap.set(pageSteps[0]?.page, { autoAlpha: 1, y: 0, filter: "blur(0px)" });
     gsap.set("[data-device]", { rotateX: 4, rotateY: 0, rotateZ: 0 });
     syncDeviceWords(0, 1);
 
@@ -109,7 +154,7 @@
       scrollTrigger: {
         trigger: ".story",
         start: "top top",
-        end: () => `+=${panels.length * 880}`,
+        end: () => `+=${pageSteps.length * 680}`,
         scrub: 1,
         pin: ".story-pin",
         anticipatePin: 1,
@@ -120,71 +165,63 @@
       },
     });
 
-    const deviceStates = panels.map((_, index) => ({
+    const deviceStates = pageSteps.map((_, index) => ({
       rotateX: 4,
       rotateY: index * 180,
       rotateZ: 0,
       scale: 1,
     }));
 
-    panels.forEach((panel, index) => {
+    pageSteps.forEach((step, index) => {
       const at = index;
+      const previousStep = pageSteps[index - 1];
       const state = deviceStates[index] || deviceStates[0];
-      const tags = panel.querySelectorAll(".tag-grid span");
-      const cards = panel.querySelectorAll(".info-card");
 
       if (index > 0) {
+        if (previousStep.panel !== step.panel) {
+          storyTimeline.to(
+            previousStep.panel,
+            { autoAlpha: 0, yPercent: -50, y: -54, filter: "blur(18px)", duration: 0.22 },
+            at - 0.22
+          );
+          storyTimeline.fromTo(
+            step.panel,
+            { autoAlpha: 0, yPercent: -50, y: 54, filter: "blur(18px)" },
+            { autoAlpha: 1, yPercent: -50, y: 0, filter: "blur(0px)", duration: 0.24 },
+            at
+          );
+        }
+
+        storyTimeline.to(
+          previousStep.page,
+          { autoAlpha: 0, y: -28, filter: "blur(12px)", duration: 0.2 },
+          at - 0.18
+        );
         storyTimeline.fromTo(
-          panel,
-          { autoAlpha: 0, yPercent: -50, y: 70, filter: "blur(18px)" },
-          { autoAlpha: 1, yPercent: -50, y: 0, filter: "blur(0px)", duration: 0.24 },
+          step.page,
+          { autoAlpha: 0, y: 28, filter: "blur(12px)" },
+          { autoAlpha: 1, y: 0, filter: "blur(0px)", duration: 0.24 },
           at
         );
       }
 
       storyTimeline.to("[data-device]", { ...state, duration: deviceFlipDuration }, at);
-      storyTimeline.to(".device-line", { scaleX: 0.55 + index * 0.08, duration: 0.48 }, at);
+      storyTimeline.to(".device-line", { scaleX: 0.48 + (index % 3) * 0.16, duration: 0.48 }, at);
       storyTimeline.to(".showcase-grid", { rotateZ: index % 2 === 0 ? 0.5 : -0.5, duration: 0.48 }, at);
-
-      if (tags.length) {
-        storyTimeline.fromTo(
-          tags,
-          { autoAlpha: 0, y: 28, scale: 0.94 },
-          { autoAlpha: 1, y: 0, scale: 1, duration: 0.28, stagger: 0.035 },
-          at + 0.12
-        );
-      }
-
-      if (cards.length) {
-        storyTimeline.fromTo(
-          cards,
-          { autoAlpha: 0, y: 34, rotateX: -10 },
-          { autoAlpha: 1, y: 0, rotateX: 0, duration: 0.3, stagger: 0.06 },
-          at + 0.12
-        );
-      }
-
-      if (index < panels.length - 1) {
-        storyTimeline.to(
-          panel,
-          { autoAlpha: 0, yPercent: -50, y: -70, filter: "blur(18px)", duration: 0.24 },
-          at + 0.76
-        );
-      }
     });
 
     document.querySelectorAll('.site-nav a[href^="#"]').forEach((link) => {
       link.addEventListener("click", (event) => {
         const targetId = link.getAttribute("href").slice(1);
-        const targetIndex = panels.findIndex(
-          (panel) => panel.id === targetId || panel.dataset.panel === targetId
+        const targetIndex = pageSteps.findIndex(
+          (step) => step.panel.id === targetId || step.panel.dataset.panel === targetId
         );
 
         if (targetIndex < 0 || !storyTimeline.scrollTrigger) return;
 
         event.preventDefault();
         const trigger = storyTimeline.scrollTrigger;
-        const progress = targetIndex / Math.max(panels.length - 1, 1);
+        const progress = targetIndex / Math.max(pageSteps.length - 1, 1);
         const targetY = trigger.start + (trigger.end - trigger.start) * progress + 2;
 
         window.scrollTo({ top: targetY, behavior: "smooth" });
