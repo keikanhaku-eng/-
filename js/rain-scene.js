@@ -167,7 +167,7 @@
     color: "#223031",
     map: asphaltMap,
     normalMap: asphaltNormal,
-    normalScale: new THREE.Vector2(0.72, 0.72),
+    normalScale: new THREE.Vector2(0.58, 0.58),
     roughnessMap,
     roughness: 0.08,
     metalness: 0.62,
@@ -324,7 +324,6 @@
     depthWrite: false,
     blending: THREE.AdditiveBlending,
     uniforms: {
-      uTime: { value: 0 },
       uLightPower: { value: 1 },
     },
     vertexShader: `
@@ -338,53 +337,20 @@
     fragmentShader: `
       precision mediump float;
 
-      uniform float uTime;
       uniform float uLightPower;
       varying vec2 vUv;
-
-      float hash12(vec2 p) {
-        vec3 p3 = fract(vec3(p.xyx) * 0.1031);
-        p3 += dot(p3, p3.yzx + 19.19);
-        return fract((p3.x + p3.y) * p3.z);
-      }
-
-      vec2 hash22(vec2 p) {
-        vec3 p3 = fract(vec3(p.xyx) * vec3(0.1031, 0.1030, 0.0973));
-        p3 += dot(p3, p3.yzx + 19.19);
-        return fract((p3.xx + p3.yz) * p3.zy);
-      }
-
-      float rippleField(vec2 uv) {
-        vec2 p0 = floor(uv);
-        float circles = 0.0;
-
-        for (int j = -1; j <= 1; j++) {
-          for (int i = -1; i <= 1; i++) {
-            vec2 pi = p0 + vec2(float(i), float(j));
-            vec2 p = pi + hash22(pi);
-            float t = fract(0.72 * uTime + hash12(pi));
-            float d = length(p - uv) - (1.45 * t);
-            float ring = 1.0 - smoothstep(0.0, 0.055, abs(d));
-            circles += ring * (1.0 - t) * (1.0 - t);
-          }
-        }
-
-        return circles / 9.0;
-      }
 
       void main() {
         vec2 uv = vUv;
         float perspective = smoothstep(0.02, 0.86, uv.y) * (1.0 - smoothstep(0.93, 1.0, uv.y));
         float center = 1.0 - smoothstep(0.18, 0.68, abs(uv.x - 0.5));
         float edgeMask = smoothstep(0.0, 0.2, uv.x) * smoothstep(0.0, 0.2, 1.0 - uv.x);
-        float wave = sin((uv.y * 64.0) + uTime * 2.2 + sin(uv.x * 24.0)) * 0.5 + 0.5;
-        float stripe = 1.0 - smoothstep(0.0, 0.018, abs(uv.x - 0.52 - sin(uv.y * 18.0 + uTime) * 0.014));
-        float ripple = rippleField(uv * vec2(11.0, 38.0));
-        float wet = (center * perspective * edgeMask * (wave * 0.18 + stripe * 0.22)) + ripple * 0.58;
+        float asphaltSheen = 0.18 + sin(uv.y * 18.0 + sin(uv.x * 10.0) * 0.6) * 0.035;
+        float wet = center * perspective * edgeMask * asphaltSheen;
         vec3 teal = vec3(0.18, 0.78, 0.78);
         vec3 warm = vec3(0.95, 0.36, 0.24);
         vec3 color = mix(teal, warm, smoothstep(0.34, 0.72, uv.x)) * wet * uLightPower;
-        gl_FragColor = vec4(color, wet * 0.62);
+        gl_FragColor = vec4(color, wet * 0.48);
       }
     `,
   });
@@ -397,10 +363,11 @@
   const rippleMaterial = new THREE.ShaderMaterial({
     transparent: true,
     depthWrite: false,
+    side: THREE.DoubleSide,
     blending: THREE.AdditiveBlending,
     uniforms: {
       uTime: { value: 0 },
-      uOpacity: { value: 0.46 },
+      uOpacity: { value: 1.18 },
     },
     vertexShader: `
       attribute vec3 aOffset;
@@ -411,14 +378,17 @@
 
       varying vec2 vUv;
       varying float vAlpha;
+      varying float vPhase;
 
       void main() {
         vUv = uv;
-        float phase = fract(uTime * 0.55 + aSeed);
-        float scale = aSize * mix(0.28, 1.75, phase);
+        float phase = fract(uTime * 0.72 + aSeed);
+        float appear = smoothstep(0.07, 0.16, phase) * (1.0 - smoothstep(0.78, 1.0, phase));
+        float scale = aSize;
         vec3 transformed = vec3(position.x * scale, 0.0, position.y * scale);
         vec3 worldPosition = aOffset + transformed;
-        vAlpha = (1.0 - phase) * (1.0 - phase);
+        vPhase = phase;
+        vAlpha = appear * (1.0 - phase * 0.42);
         gl_Position = projectionMatrix * viewMatrix * vec4(worldPosition, 1.0);
       }
     `,
@@ -429,17 +399,20 @@
 
       varying vec2 vUv;
       varying float vAlpha;
+      varying float vPhase;
 
       void main() {
         vec2 p = vUv - 0.5;
         float d = length(p);
-        float ring = 1.0 - smoothstep(0.005, 0.032, abs(d - 0.36));
-        float inner = 1.0 - smoothstep(0.0, 0.5, d);
-        float alpha = (ring * 0.86 + inner * 0.06) * vAlpha * uOpacity;
+        float radius = mix(0.2, 0.52, vPhase);
+        float width = mix(0.03, 0.052, vPhase);
+        float outerRing = 1.0 - smoothstep(0.0, width, abs(d - radius));
+        float innerRing = 1.0 - smoothstep(0.0, width * 0.78, abs(d - radius * 0.62));
+        float alpha = (outerRing * 1.18 + innerRing * 0.32) * vAlpha * uOpacity;
         if (alpha < 0.004) {
           discard;
         }
-        gl_FragColor = vec4(vec3(0.72, 0.96, 1.0), alpha);
+        gl_FragColor = vec4(vec3(0.82, 0.98, 1.0), alpha);
       }
     `,
   });
@@ -456,11 +429,11 @@
     const sizes = new Float32Array(count);
 
     for (let i = 0; i < count; i += 1) {
-      offsets[i * 3] = THREE.MathUtils.randFloat(-7.5, 13.5);
-      offsets[i * 3 + 1] = -2.048;
-      offsets[i * 3 + 2] = THREE.MathUtils.randFloat(-22, -3.5);
+      offsets[i * 3] = THREE.MathUtils.randFloat(-9.5, 15.5);
+      offsets[i * 3 + 1] = -1.998;
+      offsets[i * 3 + 2] = THREE.MathUtils.randFloat(-23.5, -2.5);
       seeds[i] = Math.random();
-      sizes[i] = THREE.MathUtils.randFloat(0.42, 1.35);
+      sizes[i] = THREE.MathUtils.randFloat(1.05, 2.85);
     }
 
     geometry.setAttribute("aOffset", new THREE.InstancedBufferAttribute(offsets, 3));
@@ -472,7 +445,8 @@
     return ripples;
   };
 
-  const groundRipples = createRippleField(isCompact ? 34 : 72);
+  const groundRipples = createRippleField(isCompact ? 54 : 128);
+  groundRipples.renderOrder = 3;
   scene.add(groundRipples);
 
   const makeWetStreaks = () => {
@@ -704,10 +678,8 @@
     camera.lookAt(lookTarget);
 
     rainMaterial.uniforms.uTime.value = elapsed;
-    reflectionMaterial.uniforms.uTime.value = elapsed;
     rippleMaterial.uniforms.uTime.value = elapsed;
     sign.position.y = 4.8 + Math.sin(elapsed * 0.8) * 0.018;
-    groundMaterial.normalScale.set(0.58 + Math.sin(elapsed * 0.8) * 0.04, 0.58);
     updateLights(elapsed);
 
     renderBackgroundTarget();
