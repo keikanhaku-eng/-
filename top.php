@@ -1,3 +1,16 @@
+<?php
+
+    // ログインチェック
+    session_start();
+    $host = $_SERVER['HTTP_HOST'] ?? '';
+    $isLocalPreview = preg_match('/^(localhost|127\.0\.0\.1|\[::1\]|::1)(:\d+)?$/', $host) === 1;
+
+    if(!$isLocalPreview && !isset($_SESSION['kengen'])){
+        header("Location:../../../login.php");
+        exit;
+    }
+
+?>
 <!doctype html>
 <html lang="ja">
   <head>
@@ -8,13 +21,13 @@
       content="中国出身の敬涵博（ケイ）の自己紹介ページ。学習経験、資格、強み、趣味、今後の目標を紹介します。"
     />
     <title>敬涵博（ケイ） | 自己紹介</title>
-    <link rel="stylesheet" href="style.css" />
+    <link rel="stylesheet" href="css/style.css" />
     <script defer src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
     <script
       defer
       src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/ScrollTrigger.min.js"
     ></script>
-    <script defer src="script.js"></script>
+    <script defer src="js/script.js"></script>
   </head>
   <body>
     <div class="background-system" aria-hidden="true">
@@ -89,7 +102,7 @@
             <div class="showcase-device" data-device>
               <div class="device-face device-face-front">
                 <div class="device-screen">
-                  <img class="device-photo" data-device-photo-front src="test1.png" alt="" onerror="this.hidden=true" />
+                  <img class="device-photo" data-device-photo-front src="img/test1.png" alt="" onerror="this.hidden=true" />
                   <div class="device-line line-one"></div>
                   <div class="device-line line-two"></div>
                   <div class="device-line line-three"></div>
@@ -100,7 +113,7 @@
               </div>
               <div class="device-face device-face-back">
                 <div class="device-screen">
-                  <img class="device-photo" data-device-photo-back src="test2.png" alt="" onerror="this.hidden=true" />
+                  <img class="device-photo" data-device-photo-back src="img/test2.png" alt="" onerror="this.hidden=true" />
                   <div class="device-line line-one"></div>
                   <div class="device-line line-two"></div>
                   <div class="device-line line-three"></div>
@@ -122,7 +135,7 @@
               <p class="section-kicker">Profile</p>
               <h2>プロフィール</h2>
               <div class="page-stack" data-page-stack>
-                <div class="story-page" data-page data-word="Profile" data-image="test1.png">
+                <div class="story-page" data-page data-word="Profile" data-image="img/test1.png">
                   <p class="page-number">01 / 03</p>
                   <div class="body-copy">
                     <p>
@@ -133,7 +146,7 @@
                     </p>
                   </div>
                 </div>
-                <div class="story-page" data-page data-word="Profile" data-image="test1.png">
+                <div class="story-page" data-page data-word="Profile" data-image="img/test1.png">
                   <p class="page-number">02 / 03</p>
                   <div class="body-copy">
                     <p>
@@ -144,7 +157,7 @@
                     </p>
                   </div>
                 </div>
-                <div class="story-page" data-page data-word="Profile" data-image="test1.png">
+                <div class="story-page" data-page data-word="Profile" data-image="img/test1.png">
                   <p class="page-number">03 / 03</p>
                   <div class="body-copy">
                     <p>
@@ -173,7 +186,7 @@
               
               <h2>経歴</h2>
               <div class="page-stack" data-page-stack>
-                <div class="story-page" data-page data-word="Career" data-image="test3.png">
+                <div class="story-page" data-page data-word="Career" data-image="img/test3.png">
                   <p class="page-number">01 / 03</p>
                   <div class="body-copy">
                     <p>
@@ -184,7 +197,7 @@
                     </p>
                   </div>
                 </div>
-                <div class="story-page" data-page data-word="Career" data-image="test3.png">
+                <div class="story-page" data-page data-word="Career" data-image="img/test3.png">
                   <p class="page-number">02 / 03</p>
                   <div class="body-copy">
                     <p>
@@ -195,7 +208,7 @@
                     </p>
                   </div>
                 </div>
-                <div class="story-page" data-page data-word="Career" data-image="test3.png">
+                <div class="story-page" data-page data-word="Career" data-image="img/test3.png">
                   <p class="page-number">03 / 03</p>
                   <div class="body-copy">
                     <p>
@@ -261,7 +274,7 @@
               <p class="section-kicker">Hobby</p>
               <h2>好きなもの</h2>
               <div class="page-stack" data-page-stack>
-                <div class="story-page" data-page data-word="Hobby" data-image="test2.png">
+                <div class="story-page" data-page data-word="Hobby" data-image="img/test2.png">
                   <p class="page-number">01 / 03</p>
                   <div class="body-copy">
                     <p>
@@ -272,7 +285,7 @@
                     </p>
                   </div>
                 </div>
-                <div class="story-page" data-page data-word="Hobby" data-image="test2.png">
+                <div class="story-page" data-page data-word="Hobby" data-image="img/test2.png">
                   <p class="page-number">02 / 03</p>
                   <div class="body-copy">
                     <p>
@@ -283,7 +296,7 @@
                     </p>
                   </div>
                 </div>
-                <div class="story-page" data-page data-word="Hobby" data-image="test2.png">
+                <div class="story-page" data-page data-word="Hobby" data-image="img/test2.png">
                   <p class="page-number">03 / 03</p>
                   <div class="body-copy">
                     <p>

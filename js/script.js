@@ -29,7 +29,7 @@
       panelIndex,
       pageIndex,
       word: (page.dataset.word || word).trim(),
-      image: page.dataset.image || `test${panelIndex + 1}.png`,
+      image: page.dataset.image || `img/test${panelIndex + 1}.png`,
     }));
   });
   const deviceWordFront = document.querySelector("[data-device-word-front]");
