@@ -41,6 +41,7 @@
   const desktopQuery = window.matchMedia("(min-width: 981px)");
   const deviceFlipDuration = 0.64;
   const deviceFaceSwitchOffset = deviceFlipDuration / 2;
+  const deviceSelector = "[data-device]";
   const maxStepIndex = Math.max(pageSteps.length - 1, 0);
 
   const setText = (element, value) => {
@@ -98,12 +99,26 @@
     }
   };
 
-  const syncDeviceWordsFromTime = (time, direction = 1) => {
+  const getActiveStepIndex = (time) => {
+    const boundaryIndex = Math.floor(time);
+    const boundaryStep = pageSteps[boundaryIndex];
+    const previousStep = pageSteps[boundaryIndex - 1];
+
+    if (previousStep && boundaryStep && previousStep.panel !== boundaryStep.panel) {
+      return gsap.utils.clamp(0, maxStepIndex, boundaryIndex);
+    }
+
     const activeIndex = gsap.utils.clamp(
       0,
       maxStepIndex,
       Math.floor(time - deviceFaceSwitchOffset)
     );
+
+    return activeIndex;
+  };
+
+  const syncDeviceWordsFromTime = (time, direction = 1) => {
+    const activeIndex = getActiveStepIndex(time);
 
     syncDeviceWords(activeIndex, direction);
   };
@@ -146,7 +161,7 @@
     );
     gsap.set(pageSteps[0]?.panel, { autoAlpha: 1, yPercent: -50, y: 0, filter: "blur(0px)" });
     gsap.set(pageSteps[0]?.page, { autoAlpha: 1, y: 0, filter: "blur(0px)" });
-    gsap.set("[data-device]", { rotateX: 4, rotateY: 0, rotateZ: 0 });
+    gsap.set(deviceSelector, { xPercent: 0, rotateX: 4, rotateY: 0, rotateZ: 0, autoAlpha: 1 });
     syncDeviceWords(0, 1);
 
     const storyTimeline = gsap.timeline({
@@ -205,7 +220,49 @@
         );
       }
 
-      storyTimeline.to("[data-device]", { ...state, duration: deviceFlipDuration }, at);
+      if (index > 0 && previousStep.panel !== step.panel) {
+        storyTimeline.to(
+          deviceSelector,
+          {
+            xPercent: -150,
+            rotateX: 4,
+            rotateY: state.rotateY - 120,
+            rotateZ: -8,
+            scale: 0.86,
+            autoAlpha: 0,
+            duration: 0.34,
+          },
+          at - 0.34
+        );
+        storyTimeline.set(
+          deviceSelector,
+          {
+            xPercent: 150,
+            rotateX: 4,
+            rotateY: state.rotateY - 120,
+            rotateZ: 8,
+            scale: 0.86,
+            autoAlpha: 0,
+          },
+          at
+        );
+        storyTimeline.to(
+          deviceSelector,
+          {
+            ...state,
+            xPercent: 0,
+            autoAlpha: 1,
+            duration: 0.46,
+          },
+          at
+        );
+      } else {
+        storyTimeline.to(
+          deviceSelector,
+          { ...state, xPercent: 0, autoAlpha: 1, duration: deviceFlipDuration },
+          at
+        );
+      }
       storyTimeline.to(".device-line", { scaleX: 0.48 + (index % 3) * 0.16, duration: 0.48 }, at);
       storyTimeline.to(".showcase-grid", { rotateZ: index % 2 === 0 ? 0.5 : -0.5, duration: 0.48 }, at);
     });

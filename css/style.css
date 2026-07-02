@@ -394,6 +394,7 @@ p {
   display: grid;
   place-items: center;
   perspective: 1100px;
+  overflow: visible;
 }
 
 .showcase-label {
@@ -457,6 +458,7 @@ p {
   position: relative;
   width: 330px;
   height: 420px;
+  transform-origin: center center;
   transform-style: preserve-3d;
   will-change: transform;
 }
