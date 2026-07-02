@@ -21,7 +21,9 @@
       content="中国出身の敬涵博（ケイ）の自己紹介ページ。学習経験、資格、強み、趣味、今後の目標を紹介します。"
     />
     <title>敬涵博（ケイ） | 自己紹介</title>
-    <link rel="stylesheet" href="css/style.css" />
+    <link rel="stylesheet" href="css/style.css?v=rain-scene-20260702-2" />
+    <script defer src="https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.min.js"></script>
+    <script defer src="js/rain-scene.js?v=rain-scene-20260702-2"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
     <script
       defer
@@ -31,6 +33,8 @@
   </head>
   <body>
     <div class="background-system" aria-hidden="true">
+      <div class="rain-webgl" data-rain-scene></div>
+      <div class="rain-atmosphere"></div>
       <div class="grid-layer"></div>
       <div class="scan-layer"></div>
     </div>

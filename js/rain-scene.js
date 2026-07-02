@@ -1,0 +1,734 @@
+(() => {
+  const container = document.querySelector("[data-rain-scene]");
+  const THREE = window.THREE;
+
+  if (!container || !THREE) {
+    document.documentElement.classList.add("no-rain-webgl");
+    return;
+  }
+
+  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const isCompact = window.matchMedia("(max-width: 760px)").matches;
+
+  let renderer;
+  try {
+    renderer = new THREE.WebGLRenderer({
+      antialias: false,
+      alpha: false,
+      powerPreference: "high-performance",
+    });
+  } catch (error) {
+    document.documentElement.classList.add("no-rain-webgl");
+    return;
+  }
+
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color("#030606");
+  scene.fog = new THREE.FogExp2("#061012", 0.025);
+
+  const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 90);
+  camera.position.set(0.4, 2.32, 8.6);
+
+  renderer.setClearColor("#030606", 1);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.55));
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.18;
+  container.appendChild(renderer.domElement);
+  const backgroundSystem = container.closest(".background-system");
+  if (backgroundSystem) {
+    backgroundSystem.classList.add("rain-scene-ready");
+  }
+
+  const clock = new THREE.Clock();
+  const lookTarget = new THREE.Vector3(2.4, 0.35, -15.8);
+  const bgTarget = new THREE.WebGLRenderTarget(2, 2, {
+    depthBuffer: true,
+    stencilBuffer: false,
+  });
+
+  const hash = (x, y, seed = 0) => {
+    const n = Math.sin(x * 127.1 + y * 311.7 + seed * 74.7) * 43758.5453123;
+    return n - Math.floor(n);
+  };
+
+  const makeCanvasTexture = (size, painter, colorTexture = false) => {
+    const canvas = document.createElement("canvas");
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    painter(ctx, size);
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+    texture.needsUpdate = true;
+    if (colorTexture && "colorSpace" in texture) {
+      texture.colorSpace = THREE.SRGBColorSpace;
+    }
+    return texture;
+  };
+
+  const asphaltMap = makeCanvasTexture(512, (ctx, size) => {
+    const image = ctx.createImageData(size, size);
+    for (let y = 0; y < size; y += 1) {
+      for (let x = 0; x < size; x += 1) {
+        const i = (y * size + x) * 4;
+        const grain = hash(x >> 1, y >> 1, 3) * 35 + hash(x >> 3, y >> 3, 9) * 28;
+        const seam = x % 128 < 2 || y % 176 < 2 ? 18 : 0;
+        const wet = hash(x >> 4, y >> 4, 21) > 0.66 ? 20 : 0;
+        const value = Math.max(9, Math.min(78, 22 + grain - seam + wet));
+        image.data[i] = value * 0.7;
+        image.data[i + 1] = value * 0.86;
+        image.data[i + 2] = value;
+        image.data[i + 3] = 255;
+      }
+    }
+    ctx.putImageData(image, 0, 0);
+  }, true);
+  asphaltMap.repeat.set(5, 13);
+
+  const asphaltNormal = makeCanvasTexture(512, (ctx, size) => {
+    const image = ctx.createImageData(size, size);
+    for (let y = 0; y < size; y += 1) {
+      for (let x = 0; x < size; x += 1) {
+        const i = (y * size + x) * 4;
+        const left = hash(x - 1, y, 4);
+        const right = hash(x + 1, y, 4);
+        const up = hash(x, y - 1, 4);
+        const down = hash(x, y + 1, 4);
+        image.data[i] = 128 + (left - right) * 80;
+        image.data[i + 1] = 128 + (up - down) * 80;
+        image.data[i + 2] = 218;
+        image.data[i + 3] = 255;
+      }
+    }
+    ctx.putImageData(image, 0, 0);
+  }, true);
+  asphaltNormal.repeat.set(5, 13);
+
+  const roughnessMap = makeCanvasTexture(512, (ctx, size) => {
+    const image = ctx.createImageData(size, size);
+    for (let y = 0; y < size; y += 1) {
+      for (let x = 0; x < size; x += 1) {
+        const i = (y * size + x) * 4;
+        const puddle = hash(x >> 5, y >> 5, 18) > 0.58 ? 42 : 118;
+        const grain = hash(x >> 2, y >> 2, 5) * 38;
+        const value = Math.max(34, Math.min(180, puddle + grain));
+        image.data[i] = value;
+        image.data[i + 1] = value;
+        image.data[i + 2] = value;
+        image.data[i + 3] = 255;
+      }
+    }
+    ctx.putImageData(image, 0, 0);
+  });
+  roughnessMap.repeat.set(5, 13);
+
+  const wallMap = makeCanvasTexture(512, (ctx, size) => {
+    const image = ctx.createImageData(size, size);
+    for (let y = 0; y < size; y += 1) {
+      for (let x = 0; x < size; x += 1) {
+        const i = (y * size + x) * 4;
+        const mortar = x % 96 < 2 || y % 72 < 2 ? 20 : 0;
+        const water = hash(x >> 3, y >> 1, 32) > 0.83 ? 24 : 0;
+        const value = Math.max(8, Math.min(70, 24 + hash(x >> 1, y >> 1, 7) * 24 - mortar + water));
+        image.data[i] = value * 0.72;
+        image.data[i + 1] = value * 0.9;
+        image.data[i + 2] = value;
+        image.data[i + 3] = 255;
+      }
+    }
+    ctx.putImageData(image, 0, 0);
+  });
+  wallMap.repeat.set(4, 2);
+
+  const wallNormal = makeCanvasTexture(512, (ctx, size) => {
+    const image = ctx.createImageData(size, size);
+    for (let y = 0; y < size; y += 1) {
+      for (let x = 0; x < size; x += 1) {
+        const i = (y * size + x) * 4;
+        const lineX = x % 96 < 3 ? 0.9 : 0;
+        const lineY = y % 72 < 3 ? 0.7 : 0;
+        const left = hash(x - 1, y, 13) + lineX;
+        const right = hash(x + 1, y, 13);
+        const up = hash(x, y - 1, 13) + lineY;
+        const down = hash(x, y + 1, 13);
+        image.data[i] = 128 + (left - right) * 58;
+        image.data[i + 1] = 128 + (up - down) * 58;
+        image.data[i + 2] = 226;
+        image.data[i + 3] = 255;
+      }
+    }
+    ctx.putImageData(image, 0, 0);
+  });
+  wallNormal.repeat.set(4, 2);
+
+  const groundMaterial = new THREE.MeshStandardMaterial({
+    color: "#223031",
+    map: asphaltMap,
+    normalMap: asphaltNormal,
+    normalScale: new THREE.Vector2(0.72, 0.72),
+    roughnessMap,
+    roughness: 0.08,
+    metalness: 0.62,
+  });
+
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(44, 78, 1, 1), groundMaterial);
+  ground.rotation.x = -Math.PI / 2;
+  ground.position.set(0, -2.1, -18);
+  scene.add(ground);
+
+  const makeGroundGrid = () => {
+    const positions = [];
+    const zStart = -28;
+    const zEnd = 9;
+    const xStart = -18;
+    const xEnd = 18;
+
+    for (let x = xStart; x <= xEnd; x += 3) {
+      positions.push(x, -2.035, zStart, x, -2.035, zEnd);
+    }
+
+    for (let z = zStart; z <= zEnd; z += 3) {
+      positions.push(xStart, -2.034, z, xEnd, -2.034, z);
+    }
+
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+    const material = new THREE.LineBasicMaterial({
+      color: "#7df3ee",
+      transparent: true,
+      opacity: 0.18,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+    return new THREE.LineSegments(geometry, material);
+  };
+
+  scene.add(makeGroundGrid());
+
+  const wallMaterial = new THREE.MeshStandardMaterial({
+    color: "#111719",
+    map: wallMap,
+    normalMap: wallNormal,
+    normalScale: new THREE.Vector2(0.5, 0.5),
+    roughness: 0.42,
+    metalness: 0.12,
+  });
+
+  const wall = new THREE.Mesh(new THREE.PlaneGeometry(44, 20, 1, 1), wallMaterial);
+  wall.position.set(0, 5.8, -26);
+  scene.add(wall);
+
+  const sideWallMaterial = new THREE.MeshStandardMaterial({
+    color: "#0b1011",
+    map: wallMap,
+    normalMap: wallNormal,
+    normalScale: new THREE.Vector2(0.32, 0.32),
+    roughness: 0.5,
+    metalness: 0.1,
+  });
+
+  const rightWall = new THREE.Mesh(new THREE.PlaneGeometry(28, 19), sideWallMaterial);
+  rightWall.rotation.y = -Math.PI / 2;
+  rightWall.position.set(18.4, 5.4, -13.4);
+  scene.add(rightWall);
+
+  const leftWall = new THREE.Mesh(new THREE.PlaneGeometry(22, 17), sideWallMaterial);
+  leftWall.rotation.y = Math.PI / 2;
+  leftWall.position.set(-16.8, 4.8, -15.8);
+  scene.add(leftWall);
+
+  const ceiling = new THREE.Mesh(
+    new THREE.PlaneGeometry(38, 72, 1, 1),
+    new THREE.MeshStandardMaterial({
+      color: "#080c0d",
+      roughness: 0.74,
+      metalness: 0.08,
+    })
+  );
+  ceiling.rotation.x = Math.PI / 2;
+  ceiling.position.set(0, 12.2, -18);
+  scene.add(ceiling);
+
+  const makeSignTexture = () => {
+    const canvas = document.createElement("canvas");
+    canvas.width = 1024;
+    canvas.height = 512;
+    const ctx = canvas.getContext("2d");
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.shadowColor = "rgba(68, 214, 196, 0.95)";
+    ctx.shadowBlur = 40;
+    ctx.strokeStyle = "rgba(190, 255, 247, 0.96)";
+    ctx.lineWidth = 6;
+    ctx.font = "900 172px Arial, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.strokeText("KEI", 512, 214);
+    ctx.fillStyle = "rgba(225, 255, 250, 0.92)";
+    ctx.fillText("KEI", 512, 214);
+    ctx.shadowBlur = 22;
+    ctx.font = "800 42px Arial, sans-serif";
+    ctx.fillStyle = "rgba(255, 138, 98, 0.72)";
+    ctx.fillText("SELF INTRODUCTION", 512, 330);
+    ctx.strokeStyle = "rgba(68, 214, 196, 0.56)";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(248, 380);
+    ctx.lineTo(776, 380);
+    ctx.stroke();
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.needsUpdate = true;
+    if ("colorSpace" in texture) {
+      texture.colorSpace = THREE.SRGBColorSpace;
+    }
+    return texture;
+  };
+
+  const signMaterial = new THREE.MeshBasicMaterial({
+    map: makeSignTexture(),
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    opacity: 0.92,
+  });
+  const sign = new THREE.Mesh(new THREE.PlaneGeometry(11.2, 5.6), signMaterial);
+  sign.position.set(5.1, 4.8, -25.68);
+  scene.add(sign);
+
+  const makeLightBox = (color, width, height, depth, intensity) => {
+    const material = new THREE.MeshStandardMaterial({
+      color,
+      emissive: color,
+      emissiveIntensity: intensity,
+      roughness: 0.22,
+      metalness: 0.16,
+    });
+    return new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), material);
+  };
+
+  const rightLampHigh = makeLightBox("#d8fbff", 2.1, 0.72, 0.16, 2.8);
+  rightLampHigh.position.set(13.2, 7.4, -25.42);
+  scene.add(rightLampHigh);
+
+  const rightLampLow = makeLightBox("#fff0dc", 1.7, 0.58, 0.16, 1.9);
+  rightLampLow.position.set(11.9, 2.55, -25.4);
+  scene.add(rightLampLow);
+
+  const leftLamp = makeLightBox("#ffe0c9", 1.4, 0.5, 0.16, 1.7);
+  leftLamp.position.set(-9.4, 3.6, -25.42);
+  scene.add(leftLamp);
+
+  const reflectionMaterial = new THREE.ShaderMaterial({
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    uniforms: {
+      uTime: { value: 0 },
+      uLightPower: { value: 1 },
+    },
+    vertexShader: `
+      varying vec2 vUv;
+
+      void main() {
+        vUv = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      precision mediump float;
+
+      uniform float uTime;
+      uniform float uLightPower;
+      varying vec2 vUv;
+
+      float hash12(vec2 p) {
+        vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+        p3 += dot(p3, p3.yzx + 19.19);
+        return fract((p3.x + p3.y) * p3.z);
+      }
+
+      vec2 hash22(vec2 p) {
+        vec3 p3 = fract(vec3(p.xyx) * vec3(0.1031, 0.1030, 0.0973));
+        p3 += dot(p3, p3.yzx + 19.19);
+        return fract((p3.xx + p3.yz) * p3.zy);
+      }
+
+      float rippleField(vec2 uv) {
+        vec2 p0 = floor(uv);
+        float circles = 0.0;
+
+        for (int j = -1; j <= 1; j++) {
+          for (int i = -1; i <= 1; i++) {
+            vec2 pi = p0 + vec2(float(i), float(j));
+            vec2 p = pi + hash22(pi);
+            float t = fract(0.72 * uTime + hash12(pi));
+            float d = length(p - uv) - (1.45 * t);
+            float ring = 1.0 - smoothstep(0.0, 0.055, abs(d));
+            circles += ring * (1.0 - t) * (1.0 - t);
+          }
+        }
+
+        return circles / 9.0;
+      }
+
+      void main() {
+        vec2 uv = vUv;
+        float perspective = smoothstep(0.02, 0.86, uv.y) * (1.0 - smoothstep(0.93, 1.0, uv.y));
+        float center = 1.0 - smoothstep(0.18, 0.68, abs(uv.x - 0.5));
+        float edgeMask = smoothstep(0.0, 0.2, uv.x) * smoothstep(0.0, 0.2, 1.0 - uv.x);
+        float wave = sin((uv.y * 64.0) + uTime * 2.2 + sin(uv.x * 24.0)) * 0.5 + 0.5;
+        float stripe = 1.0 - smoothstep(0.0, 0.018, abs(uv.x - 0.52 - sin(uv.y * 18.0 + uTime) * 0.014));
+        float ripple = rippleField(uv * vec2(11.0, 38.0));
+        float wet = (center * perspective * edgeMask * (wave * 0.18 + stripe * 0.22)) + ripple * 0.58;
+        vec3 teal = vec3(0.18, 0.78, 0.78);
+        vec3 warm = vec3(0.95, 0.36, 0.24);
+        vec3 color = mix(teal, warm, smoothstep(0.34, 0.72, uv.x)) * wet * uLightPower;
+        gl_FragColor = vec4(color, wet * 0.62);
+      }
+    `,
+  });
+
+  const reflection = new THREE.Mesh(new THREE.PlaneGeometry(22, 36, 1, 1), reflectionMaterial);
+  reflection.rotation.x = -Math.PI / 2;
+  reflection.position.set(5.6, -2.062, -10.8);
+  scene.add(reflection);
+
+  const rippleMaterial = new THREE.ShaderMaterial({
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    uniforms: {
+      uTime: { value: 0 },
+      uOpacity: { value: 0.46 },
+    },
+    vertexShader: `
+      attribute vec3 aOffset;
+      attribute float aSeed;
+      attribute float aSize;
+
+      uniform float uTime;
+
+      varying vec2 vUv;
+      varying float vAlpha;
+
+      void main() {
+        vUv = uv;
+        float phase = fract(uTime * 0.55 + aSeed);
+        float scale = aSize * mix(0.28, 1.75, phase);
+        vec3 transformed = vec3(position.x * scale, 0.0, position.y * scale);
+        vec3 worldPosition = aOffset + transformed;
+        vAlpha = (1.0 - phase) * (1.0 - phase);
+        gl_Position = projectionMatrix * viewMatrix * vec4(worldPosition, 1.0);
+      }
+    `,
+    fragmentShader: `
+      precision mediump float;
+
+      uniform float uOpacity;
+
+      varying vec2 vUv;
+      varying float vAlpha;
+
+      void main() {
+        vec2 p = vUv - 0.5;
+        float d = length(p);
+        float ring = 1.0 - smoothstep(0.005, 0.032, abs(d - 0.36));
+        float inner = 1.0 - smoothstep(0.0, 0.5, d);
+        float alpha = (ring * 0.86 + inner * 0.06) * vAlpha * uOpacity;
+        if (alpha < 0.004) {
+          discard;
+        }
+        gl_FragColor = vec4(vec3(0.72, 0.96, 1.0), alpha);
+      }
+    `,
+  });
+
+  const createRippleField = (count) => {
+    const baseGeometry = new THREE.PlaneGeometry(1, 1, 1, 1);
+    const geometry = new THREE.InstancedBufferGeometry();
+    geometry.index = baseGeometry.index;
+    geometry.attributes.position = baseGeometry.attributes.position;
+    geometry.attributes.uv = baseGeometry.attributes.uv;
+
+    const offsets = new Float32Array(count * 3);
+    const seeds = new Float32Array(count);
+    const sizes = new Float32Array(count);
+
+    for (let i = 0; i < count; i += 1) {
+      offsets[i * 3] = THREE.MathUtils.randFloat(-7.5, 13.5);
+      offsets[i * 3 + 1] = -2.048;
+      offsets[i * 3 + 2] = THREE.MathUtils.randFloat(-22, -3.5);
+      seeds[i] = Math.random();
+      sizes[i] = THREE.MathUtils.randFloat(0.42, 1.35);
+    }
+
+    geometry.setAttribute("aOffset", new THREE.InstancedBufferAttribute(offsets, 3));
+    geometry.setAttribute("aSeed", new THREE.InstancedBufferAttribute(seeds, 1));
+    geometry.setAttribute("aSize", new THREE.InstancedBufferAttribute(sizes, 1));
+
+    const ripples = new THREE.Mesh(geometry, rippleMaterial);
+    ripples.frustumCulled = false;
+    return ripples;
+  };
+
+  const groundRipples = createRippleField(isCompact ? 34 : 72);
+  scene.add(groundRipples);
+
+  const makeWetStreaks = () => {
+    const positions = [];
+    for (let i = 0; i < 96; i += 1) {
+      const x = THREE.MathUtils.randFloatSpread(32);
+      const y = THREE.MathUtils.randFloat(1.4, 11.5);
+      const length = THREE.MathUtils.randFloat(0.6, 3.6);
+      positions.push(x, y, -25.03, x + THREE.MathUtils.randFloat(-0.04, 0.04), y - length, -25.02);
+    }
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+    const material = new THREE.LineBasicMaterial({
+      color: "#9edbd9",
+      transparent: true,
+      opacity: 0.12,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+    return new THREE.LineSegments(geometry, material);
+  };
+  scene.add(makeWetStreaks());
+
+  const ambient = new THREE.HemisphereLight("#9feeff", "#050707", 0.52);
+  scene.add(ambient);
+
+  const signLight = new THREE.PointLight("#44d6c4", 6.2, 42, 1.65);
+  signLight.position.set(5.1, 4.7, -19.4);
+  scene.add(signLight);
+
+  const warmLight = new THREE.PointLight("#ff8a62", 2.7, 34, 1.55);
+  warmLight.position.set(12.2, 3.7, -16.2);
+  scene.add(warmLight);
+
+  const coolBackLight = new THREE.PointLight("#d7fbff", 4.2, 46, 1.75);
+  coolBackLight.position.set(14, 5.4, -18.2);
+  scene.add(coolBackLight);
+
+  const warmBackLight = new THREE.PointLight("#ffe0c9", 2.1, 36, 1.82);
+  warmBackLight.position.set(-10.8, 3.3, -18.6);
+  scene.add(warmBackLight);
+
+  const cameraSideLight = new THREE.PointLight("#f4ffff", 1.8, 24, 1.7);
+  cameraSideLight.position.set(-4.8, 2.4, 2.8);
+  scene.add(cameraSideLight);
+
+  const lightning = new THREE.PointLight("#bdefff", 0, 52, 1.25);
+  lightning.position.set(0, 9.5, -10);
+  scene.add(lightning);
+
+  const rainMaterial = new THREE.ShaderMaterial({
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    uniforms: {
+      uTime: { value: 0 },
+      uSpeed: { value: 2.55 },
+      uHeightRange: { value: 15 },
+      uWind: { value: -0.055 },
+      uOpacity: { value: 0.78 },
+      uRefraction: { value: 0.028 },
+      uBgRt: { value: bgTarget.texture },
+    },
+    vertexShader: `
+      precision mediump float;
+
+      attribute vec3 aOffset;
+      attribute vec2 aScale;
+      attribute float aSpeed;
+      attribute float aProgress;
+      attribute float aAlpha;
+
+      uniform float uTime;
+      uniform float uSpeed;
+      uniform float uHeightRange;
+      uniform float uWind;
+
+      varying vec2 vUv;
+      varying vec2 vScreen;
+      varying float vAlpha;
+
+      void main() {
+        vUv = uv;
+        float fall = mod(aProgress - uTime * aSpeed * 0.082 * uSpeed, 1.0);
+        float y = fall * uHeightRange - uHeightRange * 0.5;
+        vec3 base = aOffset;
+        base.y += y;
+        base.x += y * uWind;
+
+        vec3 right = vec3(viewMatrix[0][0], viewMatrix[1][0], viewMatrix[2][0]);
+        vec3 up = vec3(viewMatrix[0][1], viewMatrix[1][1], viewMatrix[2][1]);
+        vec3 worldPosition = base + right * position.x * aScale.x + up * position.y * aScale.y;
+
+        vec4 clip = projectionMatrix * viewMatrix * vec4(worldPosition, 1.0);
+        vScreen = clip.xy / clip.w * 0.5 + 0.5;
+        vAlpha = aAlpha;
+        gl_Position = clip;
+      }
+    `,
+    fragmentShader: `
+      precision mediump float;
+
+      uniform sampler2D uBgRt;
+      uniform float uOpacity;
+      uniform float uRefraction;
+
+      varying vec2 vUv;
+      varying vec2 vScreen;
+      varying float vAlpha;
+
+      void main() {
+        float core = 1.0 - smoothstep(0.02, 0.47, abs(vUv.x - 0.5));
+        float taper = smoothstep(0.03, 0.22, vUv.y) * (1.0 - smoothstep(0.72, 1.0, vUv.y));
+        float drop = core * taper;
+        vec2 screenUv = clamp(vScreen, vec2(0.001), vec2(0.999));
+        vec2 refractUv = clamp(
+          screenUv + vec2((vUv.x - 0.5) * uRefraction, (vUv.y - 0.5) * uRefraction * 0.7),
+          vec2(0.001),
+          vec2(0.999)
+        );
+        vec3 refracted = texture2D(uBgRt, refractUv).rgb;
+        float edge = smoothstep(0.08, 0.78, core) * (1.0 - smoothstep(0.24, 0.5, abs(vUv.x - 0.5)));
+        float tip = smoothstep(0.7, 0.98, vUv.y) * core * 0.45;
+        float backlight = smoothstep(0.08, 0.62, dot(refracted, vec3(0.299, 0.587, 0.114)));
+        vec3 color = refracted * 0.24 + vec3(edge * 0.18 + tip * 0.08 + backlight * drop * 0.07);
+        float alpha = drop * vAlpha * uOpacity;
+        if (alpha < 0.006) {
+          discard;
+        }
+        gl_FragColor = vec4(color, alpha);
+      }
+    `,
+  });
+
+  const createRainLayer = (count, depthStart, depthEnd, width, alphaBase) => {
+    const baseGeometry = new THREE.PlaneGeometry(1, 1, 1, 1);
+    const geometry = new THREE.InstancedBufferGeometry();
+    geometry.index = baseGeometry.index;
+    geometry.attributes.position = baseGeometry.attributes.position;
+    geometry.attributes.uv = baseGeometry.attributes.uv;
+
+    const offsets = new Float32Array(count * 3);
+    const scales = new Float32Array(count * 2);
+    const speeds = new Float32Array(count);
+    const progresses = new Float32Array(count);
+    const alphas = new Float32Array(count);
+
+    for (let i = 0; i < count; i += 1) {
+      const z = THREE.MathUtils.randFloat(depthEnd, depthStart);
+      const depthFactor = THREE.MathUtils.clamp((z - depthEnd) / (depthStart - depthEnd), 0, 1);
+      offsets[i * 3] = THREE.MathUtils.randFloatSpread(width);
+      offsets[i * 3 + 1] = THREE.MathUtils.randFloat(2.8, 5.7);
+      offsets[i * 3 + 2] = z;
+      scales[i * 2] = THREE.MathUtils.randFloat(0.022, 0.055) * (0.8 + depthFactor * 1.4);
+      scales[i * 2 + 1] = THREE.MathUtils.randFloat(0.72, 1.75) * (0.78 + depthFactor * 0.72);
+      speeds[i] = THREE.MathUtils.randFloat(1.28, 2.44) * (0.85 + depthFactor * 0.72);
+      progresses[i] = Math.random();
+      alphas[i] = alphaBase * THREE.MathUtils.randFloat(0.54, 1);
+    }
+
+    geometry.setAttribute("aOffset", new THREE.InstancedBufferAttribute(offsets, 3));
+    geometry.setAttribute("aScale", new THREE.InstancedBufferAttribute(scales, 2));
+    geometry.setAttribute("aSpeed", new THREE.InstancedBufferAttribute(speeds, 1));
+    geometry.setAttribute("aProgress", new THREE.InstancedBufferAttribute(progresses, 1));
+    geometry.setAttribute("aAlpha", new THREE.InstancedBufferAttribute(alphas, 1));
+
+    const mesh = new THREE.Mesh(geometry, rainMaterial);
+    mesh.frustumCulled = false;
+    return mesh;
+  };
+
+  const rainGroup = new THREE.Group();
+  rainGroup.add(createRainLayer(isCompact ? 920 : 1700, 8.5, -28, 34, 0.72));
+  rainGroup.add(createRainLayer(isCompact ? 360 : 680, 8.8, -4, 26, 0.92));
+  rainGroup.add(createRainLayer(isCompact ? 80 : 160, 7.8, 2.2, 16, 0.78));
+  scene.add(rainGroup);
+
+  const resize = () => {
+    const width = Math.max(1, container.clientWidth || window.innerWidth);
+    const height = Math.max(1, container.clientHeight || window.innerHeight);
+    camera.aspect = width / height;
+    camera.updateProjectionMatrix();
+    renderer.setSize(width, height, false);
+    const targetRatio = 0.32;
+    bgTarget.setSize(Math.max(2, Math.floor(width * targetRatio)), Math.max(2, Math.floor(height * targetRatio)));
+  };
+
+  const renderBackgroundTarget = () => {
+    rainGroup.visible = false;
+    renderer.setRenderTarget(bgTarget);
+    renderer.render(scene, camera);
+    renderer.setRenderTarget(null);
+    rainGroup.visible = true;
+  };
+
+  let animationFrame = 0;
+  let nextFlickerAt = 1.6;
+  let flickerUntil = 0;
+  let flickerPower = 1;
+  let nextLightningAt = 4.8;
+
+  const updateLights = (elapsed) => {
+    if (elapsed > nextFlickerAt) {
+      flickerUntil = elapsed + THREE.MathUtils.randFloat(0.08, 0.32);
+      flickerPower = Math.random() < 0.55 ? 0.14 : 1.75;
+      nextFlickerAt = elapsed + THREE.MathUtils.randFloat(2.2, 4.8);
+    }
+
+    const power = elapsed < flickerUntil ? flickerPower : 1;
+    signMaterial.opacity = 0.58 + power * 0.28;
+    signLight.intensity = 1.35 + power * 2.4;
+    reflectionMaterial.uniforms.uLightPower.value = 1.05 + power * 0.68;
+
+    if (elapsed > nextLightningAt) {
+      lightning.intensity = Math.random() < 0.28 ? THREE.MathUtils.randFloat(3.8, 6.4) : 0;
+      nextLightningAt = elapsed + THREE.MathUtils.randFloat(5.8, 10.5);
+    } else {
+      lightning.intensity *= 0.86;
+    }
+  };
+
+  const render = () => {
+    const elapsed = clock.getElapsedTime();
+    const scrollable = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
+    const scrollProgress = window.scrollY / scrollable;
+
+    camera.position.x = 0.4;
+    camera.position.y = 1.82 - scrollProgress * 0.18;
+    camera.lookAt(lookTarget);
+
+    rainMaterial.uniforms.uTime.value = elapsed;
+    reflectionMaterial.uniforms.uTime.value = elapsed;
+    rippleMaterial.uniforms.uTime.value = elapsed;
+    sign.position.y = 4.8 + Math.sin(elapsed * 0.8) * 0.018;
+    groundMaterial.normalScale.set(0.58 + Math.sin(elapsed * 0.8) * 0.04, 0.58);
+    updateLights(elapsed);
+
+    renderBackgroundTarget();
+    renderer.render(scene, camera);
+
+    if (!reduceMotion) {
+      animationFrame = window.requestAnimationFrame(render);
+    }
+  };
+
+  window.addEventListener("resize", resize, { passive: true });
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden && animationFrame) {
+      window.cancelAnimationFrame(animationFrame);
+      animationFrame = 0;
+    } else if (!document.hidden && !reduceMotion && !animationFrame) {
+      clock.getDelta();
+      animationFrame = window.requestAnimationFrame(render);
+    }
+  });
+
+  resize();
+  render();
+})();
