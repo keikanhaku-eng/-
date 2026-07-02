@@ -752,22 +752,7 @@ p {
 }
 
 .story-panel::before {
-  content: "";
-  position: absolute;
-  z-index: -1;
-  top: 4px;
-  left: 46%;
-  width: min(520px, 96%);
-  height: 210px;
-  border-radius: 50%;
-  background:
-    radial-gradient(ellipse at 38% 42%, rgba(68, 214, 196, 0.18), transparent 58%),
-    radial-gradient(ellipse at 68% 58%, rgba(232, 199, 108, 0.11), transparent 56%),
-    radial-gradient(ellipse at 50% 50%, rgba(255, 255, 255, 0.07), transparent 68%);
-  filter: blur(28px);
-  pointer-events: none;
-  transform: translate(-50%, -50%);
-  animation: title-halo-drift 12s ease-in-out infinite;
+  content: none;
 }
 
 .js-enabled .story-panel {
@@ -816,14 +801,14 @@ p {
   z-index: -1;
   top: 50%;
   left: 50%;
-  width: calc(100% + 190px);
-  height: 150px;
-  border-radius: 50%;
+  width: calc(100% + 96px);
+  height: 1.45em;
+  border-radius: 999px;
   background:
-    radial-gradient(ellipse at 40% 45%, rgba(68, 214, 196, 0.18), transparent 56%),
-    radial-gradient(ellipse at 66% 55%, rgba(232, 199, 108, 0.12), transparent 58%),
-    radial-gradient(ellipse at 50% 50%, rgba(255, 255, 255, 0.07), transparent 70%);
-  filter: blur(24px);
+    radial-gradient(ellipse at 42% 50%, rgba(68, 214, 196, 0.2), transparent 58%),
+    radial-gradient(ellipse at 64% 52%, rgba(232, 199, 108, 0.12), transparent 58%),
+    radial-gradient(ellipse at 50% 50%, rgba(255, 255, 255, 0.08), transparent 72%);
+  filter: blur(22px);
   transform: translate(-50%, -50%);
   animation: title-halo-drift 13s ease-in-out infinite reverse;
 }
