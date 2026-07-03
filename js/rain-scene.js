@@ -42,6 +42,9 @@
 
   const clock = new THREE.Clock();
   const lookTarget = new THREE.Vector3(2.4, 0.35, -15.8);
+  const dynamicLookTarget = lookTarget.clone();
+  const pointerTarget = new THREE.Vector2(0, 0);
+  const pointerCurrent = new THREE.Vector2(0, 0);
   const bgTarget = new THREE.WebGLRenderTarget(2, 2, {
     depthBuffer: true,
     stencilBuffer: false,
@@ -453,14 +456,14 @@
     return group;
   };
 
-  const keiShadow = makeKeiBarGroup(signShadowMaterial, 0.08, -0.48, 1.08, 0.12, -0.12);
-  const keiText = makeKeiBarGroup(keiBarMaterials, 0.58, 0, 1);
-  const keiGlow = makeKeiBarGroup(signGlowMaterial, 0.045, 0.34, 1.12);
-  const subtitleShadow = makeRunMesh(subtitleRuns, signShadowMaterial, 0.035, -0.34, 1.12);
-  const subtitleText = makeRunMesh(subtitleRuns, signSubtitleMaterial, 0.18, 0.08, 1);
-  const subtitleGlow = makeRunMesh(subtitleRuns, signGlowMaterial, 0.025, 0.22, 1.12);
+  const keiShadow = makeKeiBarGroup(signShadowMaterial, 0.12, -0.72, 1.08, 0.15, -0.15);
+  const keiText = makeKeiBarGroup(keiBarMaterials, 0.92, 0, 1);
+  const keiGlow = makeKeiBarGroup(signGlowMaterial, 0.055, 0.52, 1.13);
+  const subtitleShadow = makeRunMesh(subtitleRuns, signShadowMaterial, 0.055, -0.42, 1.12);
+  const subtitleText = makeRunMesh(subtitleRuns, signSubtitleMaterial, 0.26, 0.11, 1);
+  const subtitleGlow = makeRunMesh(subtitleRuns, signGlowMaterial, 0.032, 0.3, 1.12);
 
-  const signUnderline = new THREE.Mesh(new THREE.BoxGeometry(5.7, 0.045, 0.08), signSubtitleMaterial);
+  const signUnderline = new THREE.Mesh(new THREE.BoxGeometry(5.7, 0.055, 0.16), signSubtitleMaterial);
   signUnderline.position.set(0, -1.36, 0.08);
 
   keiShadow.renderOrder = 1;
@@ -824,6 +827,22 @@
     rainGroup.visible = true;
   };
 
+  const updatePointerTarget = (event) => {
+    const width = Math.max(1, window.innerWidth);
+    const height = Math.max(1, window.innerHeight);
+    pointerTarget.x = THREE.MathUtils.clamp((event.clientX / width - 0.5) * 2, -1, 1);
+    pointerTarget.y = THREE.MathUtils.clamp((event.clientY / height - 0.5) * 2, -1, 1);
+  };
+
+  window.addEventListener("pointermove", updatePointerTarget, { passive: true });
+  window.addEventListener(
+    "pointerleave",
+    () => {
+      pointerTarget.set(0, 0);
+    },
+    { passive: true }
+  );
+
   let animationFrame = 0;
   let nextFlickerAt = 1.6;
   let flickerUntil = 0;
@@ -866,14 +885,23 @@
     const elapsed = clock.getElapsedTime();
     const scrollable = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
     const scrollProgress = window.scrollY / scrollable;
+    pointerCurrent.lerp(pointerTarget, 0.075);
 
-    camera.position.x = 0.4;
-    camera.position.y = 1.82 - scrollProgress * 0.18;
-    camera.lookAt(lookTarget);
+    camera.position.x = 0.4 + pointerCurrent.x * 0.5;
+    camera.position.y = 1.82 - scrollProgress * 0.18 - pointerCurrent.y * 0.22;
+    camera.position.z = 8.6 + Math.abs(pointerCurrent.x) * 0.08;
+    dynamicLookTarget.set(
+      lookTarget.x + pointerCurrent.x * 0.95,
+      lookTarget.y - pointerCurrent.y * 0.38,
+      lookTarget.z
+    );
+    camera.lookAt(dynamicLookTarget);
 
     rainMaterial.uniforms.uTime.value = elapsed;
     rippleMaterial.uniforms.uTime.value = elapsed;
     signGroup.position.y = 4.8 + Math.sin(elapsed * 0.8) * 0.018;
+    signGroup.rotation.y = -0.09 + pointerCurrent.x * 0.045;
+    signGroup.rotation.x = pointerCurrent.y * 0.012;
     updateLights(elapsed);
 
     renderBackgroundTarget();
