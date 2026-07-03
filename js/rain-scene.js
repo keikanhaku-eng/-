@@ -174,35 +174,6 @@
   waterFilm.position.set(0, -2.055, -18);
   scene.add(waterFilm);
 
-  const makeGroundGrid = () => {
-    const positions = [];
-    const zStart = -28;
-    const zEnd = 9;
-    const xStart = -18;
-    const xEnd = 18;
-
-    for (let x = xStart; x <= xEnd; x += 3) {
-      positions.push(x, -2.035, zStart, x, -2.035, zEnd);
-    }
-
-    for (let z = zStart; z <= zEnd; z += 3) {
-      positions.push(xStart, -2.034, z, xEnd, -2.034, z);
-    }
-
-    const geometry = new THREE.BufferGeometry();
-    geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
-    const material = new THREE.LineBasicMaterial({
-      color: "#7df3ee",
-      transparent: true,
-      opacity: 0.18,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
-    });
-    return new THREE.LineSegments(geometry, material);
-  };
-
-  scene.add(makeGroundGrid());
-
   const wallMaterial = new THREE.MeshStandardMaterial({
     color: "#5d7472",
     map: rainWallMap,
@@ -535,95 +506,6 @@
   reflection.rotation.x = -Math.PI / 2;
   reflection.position.set(5.6, -2.062, -10.8);
   scene.add(reflection);
-
-  const rippleMaterial = new THREE.ShaderMaterial({
-    transparent: true,
-    depthWrite: false,
-    side: THREE.DoubleSide,
-    blending: THREE.AdditiveBlending,
-    uniforms: {
-      uTime: { value: 0 },
-      uOpacity: { value: 1.18 },
-    },
-    vertexShader: `
-      attribute vec3 aOffset;
-      attribute float aSeed;
-      attribute float aSize;
-
-      uniform float uTime;
-
-      varying vec2 vUv;
-      varying float vAlpha;
-      varying float vPhase;
-
-      void main() {
-        vUv = uv;
-        float phase = fract(uTime * 0.72 + aSeed);
-        float appear = smoothstep(0.07, 0.16, phase) * (1.0 - smoothstep(0.78, 1.0, phase));
-        float scale = aSize;
-        vec3 transformed = vec3(position.x * scale, 0.0, position.y * scale);
-        vec3 worldPosition = aOffset + transformed;
-        vPhase = phase;
-        vAlpha = appear * (1.0 - phase * 0.42);
-        gl_Position = projectionMatrix * viewMatrix * vec4(worldPosition, 1.0);
-      }
-    `,
-    fragmentShader: `
-      precision mediump float;
-
-      uniform float uOpacity;
-
-      varying vec2 vUv;
-      varying float vAlpha;
-      varying float vPhase;
-
-      void main() {
-        vec2 p = vUv - 0.5;
-        float d = length(p);
-        float radius = mix(0.2, 0.52, vPhase);
-        float width = mix(0.03, 0.052, vPhase);
-        float outerRing = 1.0 - smoothstep(0.0, width, abs(d - radius));
-        float innerRing = 1.0 - smoothstep(0.0, width * 0.78, abs(d - radius * 0.62));
-        float alpha = (outerRing * 1.18 + innerRing * 0.32) * vAlpha * uOpacity;
-        if (alpha < 0.004) {
-          discard;
-        }
-        gl_FragColor = vec4(vec3(0.82, 0.98, 1.0), alpha);
-      }
-    `,
-  });
-
-  const createRippleField = (count) => {
-    const baseGeometry = new THREE.PlaneGeometry(1, 1, 1, 1);
-    const geometry = new THREE.InstancedBufferGeometry();
-    geometry.index = baseGeometry.index;
-    geometry.attributes.position = baseGeometry.attributes.position;
-    geometry.attributes.uv = baseGeometry.attributes.uv;
-
-    const offsets = new Float32Array(count * 3);
-    const seeds = new Float32Array(count);
-    const sizes = new Float32Array(count);
-
-    for (let i = 0; i < count; i += 1) {
-      offsets[i * 3] = THREE.MathUtils.randFloat(-9.5, 15.5);
-      offsets[i * 3 + 1] = -1.998;
-      offsets[i * 3 + 2] = THREE.MathUtils.randFloat(-23.5, -2.5);
-      seeds[i] = Math.random();
-      sizes[i] = THREE.MathUtils.randFloat(1.05, 2.85);
-    }
-
-    geometry.setAttribute("aOffset", new THREE.InstancedBufferAttribute(offsets, 3));
-    geometry.setAttribute("aSeed", new THREE.InstancedBufferAttribute(seeds, 1));
-    geometry.setAttribute("aSize", new THREE.InstancedBufferAttribute(sizes, 1));
-
-    const ripples = new THREE.Mesh(geometry, rippleMaterial);
-    ripples.frustumCulled = false;
-    return ripples;
-  };
-
-  const groundRipples = createRippleField(isCompact ? 54 : 128);
-  groundRipples.renderOrder = 3;
-  scene.add(groundRipples);
 
   const makeWetStreaks = () => {
     const positions = [];
@@ -1012,7 +894,6 @@
     camera.lookAt(dynamicLookTarget);
 
     rainMaterial.uniforms.uTime.value = elapsed;
-    rippleMaterial.uniforms.uTime.value = elapsed;
     signGroup.position.y = 4.8 + Math.sin(elapsed * 0.8) * 0.018;
     signGroup.rotation.y = -0.09 + pointerCurrent.x * 0.045;
     signGroup.rotation.x = pointerCurrent.y * 0.012;
