@@ -72,22 +72,34 @@
     return texture;
   };
 
-  const wallRepeatX = 6.6;
-  const wallRepeatY = 3.1;
-  const rainWallMap = loadRepeatingTexture(
-    "raintx/Water_Droplets_001_basecolor.jpg",
+  const wallRepeatX = 4.8;
+  const wallRepeatY = 2.35;
+  const brickWallMap = loadRepeatingTexture(
+    "floortx/Terracotta_Floor_Tiles_005_basecolor.png",
     wallRepeatX,
     wallRepeatY,
     true
   );
-  const rainWallNormal = loadRepeatingTexture("raintx/Water_Droplets_001_normal.jpg", wallRepeatX, wallRepeatY);
-  const rainWallRoughness = loadRepeatingTexture("raintx/Water_Droplets_001_roughness.jpg", wallRepeatX, wallRepeatY);
-  const rainWallAo = loadRepeatingTexture(
-    "raintx/Water_Droplets_001_ambientOcclusion.jpg",
+  const brickWallNormal = loadRepeatingTexture(
+    "floortx/Terracotta_Floor_Tiles_005_normal.png",
     wallRepeatX,
     wallRepeatY
   );
-  const rainWallHeight = loadRepeatingTexture("raintx/Water_Droplets_001_height.png", wallRepeatX, wallRepeatY);
+  const brickWallRoughness = loadRepeatingTexture(
+    "floortx/Terracotta_Floor_Tiles_005_roughness.png",
+    wallRepeatX,
+    wallRepeatY
+  );
+  const brickWallAo = loadRepeatingTexture(
+    "floortx/Terracotta_Floor_Tiles_005_ambientOcclusion.png",
+    wallRepeatX,
+    wallRepeatY
+  );
+  const brickWallHeight = loadRepeatingTexture(
+    "floortx/Terracotta_Floor_Tiles_005_height.png",
+    wallRepeatX,
+    wallRepeatY
+  );
 
   const groundRepeatX = 7;
   const groundRepeatY = 12.4;
@@ -175,17 +187,17 @@
   scene.add(waterFilm);
 
   const wallMaterial = new THREE.MeshStandardMaterial({
-    color: "#5d7472",
-    map: rainWallMap,
-    normalMap: rainWallNormal,
-    normalScale: new THREE.Vector2(0.92, 0.92),
-    roughnessMap: rainWallRoughness,
-    aoMap: rainWallAo,
-    aoMapIntensity: 0.64,
-    bumpMap: rainWallHeight,
-    bumpScale: 0.038,
-    roughness: 0.18,
-    metalness: 0.04,
+    color: "#5d635b",
+    map: brickWallMap,
+    normalMap: brickWallNormal,
+    normalScale: new THREE.Vector2(0.72, 0.72),
+    roughnessMap: brickWallRoughness,
+    aoMap: brickWallAo,
+    aoMapIntensity: 0.82,
+    bumpMap: brickWallHeight,
+    bumpScale: 0.032,
+    roughness: 0.48,
+    metalness: 0.03,
   });
 
   const wall = new THREE.Mesh(new THREE.PlaneGeometry(44, 20, 1, 1), wallMaterial);
@@ -194,17 +206,17 @@
   scene.add(wall);
 
   const sideWallMaterial = new THREE.MeshStandardMaterial({
-    color: "#364947",
-    map: rainWallMap,
-    normalMap: rainWallNormal,
+    color: "#454d47",
+    map: brickWallMap,
+    normalMap: brickWallNormal,
     normalScale: new THREE.Vector2(0.58, 0.58),
-    roughnessMap: rainWallRoughness,
-    aoMap: rainWallAo,
-    aoMapIntensity: 0.5,
-    bumpMap: rainWallHeight,
-    bumpScale: 0.024,
-    roughness: 0.24,
-    metalness: 0.04,
+    roughnessMap: brickWallRoughness,
+    aoMap: brickWallAo,
+    aoMapIntensity: 0.78,
+    bumpMap: brickWallHeight,
+    bumpScale: 0.026,
+    roughness: 0.56,
+    metalness: 0.02,
   });
 
   const rightWall = new THREE.Mesh(new THREE.PlaneGeometry(28, 19), sideWallMaterial);
