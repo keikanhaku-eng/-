@@ -357,8 +357,31 @@
     color: "#d9fffb",
     emissive: "#44d6c4",
     emissiveIntensity: 0.92,
-    roughness: 0.18,
-    metalness: 0.18,
+    roughness: 0.12,
+    metalness: 0.28,
+  });
+
+  const signSideMaterial = new THREE.MeshStandardMaterial({
+    color: "#234c4a",
+    emissive: "#1aa79c",
+    emissiveIntensity: 0.28,
+    roughness: 0.28,
+    metalness: 0.34,
+  });
+
+  const signBackMaterial = new THREE.MeshStandardMaterial({
+    color: "#071615",
+    emissive: "#0e4d49",
+    emissiveIntensity: 0.12,
+    roughness: 0.44,
+    metalness: 0.22,
+  });
+
+  const signShadowMaterial = new THREE.MeshBasicMaterial({
+    color: "#00100f",
+    transparent: true,
+    opacity: 0.42,
+    depthWrite: false,
   });
 
   const signGlowMaterial = new THREE.MeshBasicMaterial({
@@ -377,19 +400,6 @@
     metalness: 0.14,
   });
 
-  const keiRuns = makeTextRuns({
-    text: "KEI",
-    font: "900 194px Arial, sans-serif",
-    canvasWidth: 768,
-    canvasHeight: 256,
-    textY: 130,
-    cellSize: 4,
-    worldWidth: 7.35,
-    worldHeight: 2.55,
-    yOffset: 0.58,
-    strokeWidth: 4,
-  });
-
   const subtitleRuns = makeTextRuns({
     text: "SELF INTRODUCTION",
     font: "800 44px Arial, sans-serif",
@@ -404,24 +414,64 @@
   });
 
   const signGroup = new THREE.Group();
-  signGroup.position.set(5.1, 4.8, -25.54);
-  signGroup.rotation.y = -0.035;
+  signGroup.position.set(5.1, 4.8, -25.38);
+  signGroup.rotation.y = -0.09;
 
-  const keiText = makeRunMesh(keiRuns, signBodyMaterial, 0.22, 0, 1);
-  const subtitleText = makeRunMesh(subtitleRuns, signSubtitleMaterial, 0.1, 0.04, 1);
-  const keiGlow = makeRunMesh(keiRuns, signGlowMaterial, 0.035, 0.16, 1.16);
-  const subtitleGlow = makeRunMesh(subtitleRuns, signGlowMaterial, 0.022, 0.14, 1.1);
+  const keiBarMaterials = [
+    signSideMaterial,
+    signSideMaterial,
+    signSideMaterial,
+    signSideMaterial,
+    signBodyMaterial,
+    signBackMaterial,
+  ];
+  const keiBarSpecs = [
+    { x: -2.74, y: 0.58, width: 0.42, height: 2.58, rotation: 0 },
+    { x: -2.2, y: 1.15, width: 0.42, height: 1.52, rotation: -0.66 },
+    { x: -2.2, y: 0.01, width: 0.42, height: 1.52, rotation: 0.66 },
+    { x: -0.5, y: 0.58, width: 0.42, height: 2.58, rotation: 0 },
+    { x: 0.13, y: 1.68, width: 1.32, height: 0.36, rotation: 0 },
+    { x: 0.01, y: 0.58, width: 1.06, height: 0.34, rotation: 0 },
+    { x: 0.13, y: -0.52, width: 1.32, height: 0.36, rotation: 0 },
+    { x: 2.18, y: 0.58, width: 0.42, height: 2.58, rotation: 0 },
+    { x: 2.18, y: 1.68, width: 1.18, height: 0.36, rotation: 0 },
+    { x: 2.18, y: -0.52, width: 1.18, height: 0.36, rotation: 0 },
+  ];
+
+  const makeKeiBarGroup = (material, depth, zOffset, inflate = 1, xOffset = 0, yOffset = 0) => {
+    const group = new THREE.Group();
+    keiBarSpecs.forEach((spec) => {
+      const mesh = new THREE.Mesh(
+        new THREE.BoxGeometry(spec.width * inflate, spec.height * inflate, depth),
+        material
+      );
+      mesh.position.set(spec.x + xOffset, spec.y + yOffset, zOffset);
+      mesh.rotation.z = spec.rotation;
+      mesh.frustumCulled = false;
+      group.add(mesh);
+    });
+    return group;
+  };
+
+  const keiShadow = makeKeiBarGroup(signShadowMaterial, 0.08, -0.48, 1.08, 0.12, -0.12);
+  const keiText = makeKeiBarGroup(keiBarMaterials, 0.58, 0, 1);
+  const keiGlow = makeKeiBarGroup(signGlowMaterial, 0.045, 0.34, 1.12);
+  const subtitleShadow = makeRunMesh(subtitleRuns, signShadowMaterial, 0.035, -0.34, 1.12);
+  const subtitleText = makeRunMesh(subtitleRuns, signSubtitleMaterial, 0.18, 0.08, 1);
+  const subtitleGlow = makeRunMesh(subtitleRuns, signGlowMaterial, 0.025, 0.22, 1.12);
 
   const signUnderline = new THREE.Mesh(new THREE.BoxGeometry(5.7, 0.045, 0.08), signSubtitleMaterial);
   signUnderline.position.set(0, -1.36, 0.08);
 
+  keiShadow.renderOrder = 1;
   keiText.renderOrder = 2;
+  subtitleShadow.renderOrder = 1;
   subtitleText.renderOrder = 2;
   keiGlow.renderOrder = 3;
   subtitleGlow.renderOrder = 3;
   signUnderline.renderOrder = 2;
 
-  signGroup.add(keiText, subtitleText, signUnderline, keiGlow, subtitleGlow);
+  signGroup.add(keiShadow, subtitleShadow, keiText, subtitleText, signUnderline, keiGlow, subtitleGlow);
   scene.add(signGroup);
 
   const makeLightBox = (color, width, height, depth, intensity) => {
@@ -604,6 +654,10 @@
   const signLight = new THREE.PointLight("#44d6c4", 6.2, 42, 1.65);
   signLight.position.set(5.1, 4.7, -19.4);
   scene.add(signLight);
+
+  const signRimLight = new THREE.PointLight("#e8fffb", 1.8, 18, 1.55);
+  signRimLight.position.set(2.6, 6.15, -23.4);
+  scene.add(signRimLight);
 
   const warmLight = new THREE.PointLight("#ff8a62", 2.7, 34, 1.55);
   warmLight.position.set(12.2, 3.7, -16.2);
@@ -789,11 +843,14 @@
     const glowBoost = 1 + flash * 0.74;
     signBodyMaterial.color.setRGB(0.82 * signBoost, 1 * signBoost, 0.98 * signBoost);
     signBodyMaterial.emissiveIntensity = 0.48 + power * 0.46 + flash * 1.9;
+    signSideMaterial.emissiveIntensity = 0.18 + power * 0.18 + flash * 0.92;
+    signBackMaterial.emissiveIntensity = 0.06 + power * 0.08 + flash * 0.42;
     signSubtitleMaterial.color.setRGB(1 * (1 + flash * 0.24), 0.67 * signBoost, 0.55 * signBoost);
     signSubtitleMaterial.emissiveIntensity = 0.24 + power * 0.28 + flash * 0.92;
     signGlowMaterial.opacity = THREE.MathUtils.clamp(flash * 0.28, 0, 0.86);
     signGlowMaterial.color.setRGB(0.7 * glowBoost, 1 * glowBoost, 0.96 * glowBoost);
     signLight.intensity = 1.65 + power * 3.45 + flash * 9.8;
+    signRimLight.intensity = 1.15 + power * 0.8 + flash * 2.8;
     signLight.distance = 42 + flash * 7;
     reflectionMaterial.uniforms.uLightPower.value = 1.05 + power * 0.68 + flash * 0.36;
 
