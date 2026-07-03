@@ -70,16 +70,16 @@
   );
   const scrollCameraViews = [
     {
-      position: new THREE.Vector3(0.45, 2.72, 8.2),
-      target: new THREE.Vector3(2.45, 0.62, -15.9),
+      position: new THREE.Vector3(0.15, 4.45, 7.3),
+      target: new THREE.Vector3(2.4, -0.45, -16.2),
     },
     {
-      position: new THREE.Vector3(-1.15, 2.34, 8.35),
-      target: new THREE.Vector3(2.0, 0.48, -15.95),
+      position: new THREE.Vector3(-4.2, 3.0, 7.2),
+      target: new THREE.Vector3(1.8, 0.25, -16.1),
     },
     {
-      position: new THREE.Vector3(1.55, 2.25, 9.1),
-      target: new THREE.Vector3(2.82, 0.46, -16.12),
+      position: new THREE.Vector3(5.6, 2.95, 9.25),
+      target: new THREE.Vector3(3.0, 0.12, -16.55),
     },
   ];
   const bgTarget = new THREE.WebGLRenderTarget(2, 2, {
@@ -973,8 +973,8 @@
       cameraTargetLookTarget.lerpVectors(lookTarget, cameraTargetLookTarget, focus);
     }
 
-    cameraCurrentPosition.lerp(cameraTargetPosition, 0.045);
-    cameraCurrentLookTarget.lerp(cameraTargetLookTarget, 0.045);
+    cameraCurrentPosition.lerp(cameraTargetPosition, 0.035);
+    cameraCurrentLookTarget.lerp(cameraTargetLookTarget, 0.035);
   };
 
   const render = () => {
