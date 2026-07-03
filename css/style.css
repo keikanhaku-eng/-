@@ -195,6 +195,99 @@ p {
   );
 }
 
+.cyber-glitch {
+  position: fixed;
+  inset: 0;
+  z-index: 35;
+  pointer-events: none;
+  opacity: 0;
+  overflow: hidden;
+  mix-blend-mode: screen;
+  transform: translateZ(0);
+}
+
+.cyber-glitch::before,
+.cyber-glitch::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+}
+
+.cyber-glitch::before {
+  background:
+    radial-gradient(circle at 18% 22%, rgba(68, 214, 196, 0.2), transparent 16%),
+    radial-gradient(circle at 74% 62%, rgba(255, 65, 102, 0.16), transparent 18%),
+    repeating-linear-gradient(0deg, transparent 0, transparent 3px, rgba(255, 255, 255, 0.08) 3px, rgba(255, 255, 255, 0.08) 4px);
+  transform: translateX(var(--glitch-wide-x, 0));
+}
+
+.cyber-glitch::after {
+  background:
+    linear-gradient(180deg, transparent, rgba(255, 255, 255, 0.12), transparent),
+    repeating-linear-gradient(90deg, rgba(68, 214, 196, 0.12) 0, rgba(68, 214, 196, 0.12) 1px, transparent 1px, transparent 5px);
+  filter: blur(0.4px);
+  transform: translateX(calc(var(--glitch-wide-x, 0) * -0.6));
+}
+
+.cyber-glitch canvas {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  image-rendering: pixelated;
+  mix-blend-mode: screen;
+  filter: contrast(1.35) saturate(1.45);
+}
+
+.cyber-glitch span {
+  position: absolute;
+  z-index: 2;
+  left: -8vw;
+  right: -8vw;
+  top: var(--slice-y, 50%);
+  height: var(--slice-h, 2vh);
+  opacity: 0;
+  background:
+    repeating-linear-gradient(90deg, rgba(68, 214, 196, 0.24) 0, rgba(68, 214, 196, 0.24) 9px, transparent 9px, transparent 18px),
+    linear-gradient(90deg, rgba(255, 48, 86, 0.28), transparent 28%, rgba(255, 245, 198, 0.14), transparent 76%);
+  box-shadow:
+    calc(var(--slice-x, 0) * -0.55) 0 rgba(255, 38, 82, 0.18),
+    calc(var(--slice-x, 0) * 0.5) 0 rgba(68, 214, 196, 0.2);
+  transform: translateX(var(--slice-x, 0)) skewX(var(--slice-skew, 0deg));
+}
+
+.cyber-glitch.is-active {
+  opacity: var(--glitch-opacity, 0.92);
+}
+
+.cyber-glitch.is-active::before {
+  opacity: 0.34;
+}
+
+.cyber-glitch.is-active::after {
+  opacity: 0.2;
+}
+
+.cyber-glitch.is-active span {
+  opacity: var(--slice-opacity, 0.72);
+}
+
+.cyber-glitch.is-active canvas {
+  opacity: var(--noise-opacity, 0.76);
+}
+
+.cyber-glitching .rain-webgl canvas {
+  filter: contrast(1.2) saturate(1.42) hue-rotate(var(--glitch-hue, 0deg));
+  transform: translate3d(var(--glitch-canvas-x, 0), 0, 0) scale(1.006);
+}
+
+.cyber-glitching .scan-layer {
+  opacity: 0.25;
+}
+
 main,
 .site-footer {
   position: relative;

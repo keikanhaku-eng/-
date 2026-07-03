@@ -39,6 +39,14 @@
   if (backgroundSystem) {
     backgroundSystem.classList.add("rain-scene-ready");
   }
+  const glitchLayer = document.querySelector("[data-cyber-glitch]");
+  const glitchSlices = glitchLayer ? Array.from(glitchLayer.querySelectorAll("span")) : [];
+  const glitchCanvas = glitchLayer ? document.createElement("canvas") : null;
+  const glitchContext = glitchCanvas ? glitchCanvas.getContext("2d", { alpha: true }) : null;
+  if (glitchCanvas) {
+    glitchCanvas.className = "glitch-noise";
+    glitchLayer.appendChild(glitchCanvas);
+  }
 
   const clock = new THREE.Clock();
   const lookTarget = new THREE.Vector3(2.4, 0.35, -15.8);
@@ -817,6 +825,10 @@
     renderer.setSize(width, height, false);
     const targetRatio = 0.32;
     bgTarget.setSize(Math.max(2, Math.floor(width * targetRatio)), Math.max(2, Math.floor(height * targetRatio)));
+    if (glitchCanvas) {
+      glitchCanvas.width = Math.max(160, Math.floor(width * 0.48));
+      glitchCanvas.height = Math.max(90, Math.floor(height * 0.48));
+    }
   };
 
   const renderBackgroundTarget = () => {
@@ -848,6 +860,8 @@
   let flickerUntil = 0;
   let flickerPower = 1;
   let nextLightningAt = 4.8;
+  let nextGlitchAt = 3.4;
+  let glitchUntil = 0;
 
   const updateLights = (elapsed) => {
     if (elapsed > nextFlickerAt) {
@@ -881,6 +895,119 @@
     }
   };
 
+  const drawGlitchNoise = () => {
+    if (!glitchContext || !glitchCanvas) {
+      return;
+    }
+
+    const width = glitchCanvas.width;
+    const height = glitchCanvas.height;
+    const palette = [
+      [68, 214, 196],
+      [255, 56, 96],
+      [255, 241, 188],
+      [202, 244, 255],
+      [124, 116, 255],
+    ];
+
+    glitchContext.clearRect(0, 0, width, height);
+    glitchContext.globalCompositeOperation = "source-over";
+
+    const grainCount = Math.floor((width * height) / 760);
+    for (let i = 0; i < grainCount; i += 1) {
+      const color = palette[THREE.MathUtils.randInt(0, palette.length - 1)];
+      const alpha = THREE.MathUtils.randFloat(0.08, 0.5);
+      const size = Math.random() < 0.82 ? 1 : THREE.MathUtils.randInt(2, 4);
+      glitchContext.fillStyle = `rgba(${color[0]}, ${color[1]}, ${color[2]}, ${alpha})`;
+      glitchContext.fillRect(
+        THREE.MathUtils.randInt(0, width),
+        THREE.MathUtils.randInt(0, height),
+        size,
+        size
+      );
+    }
+
+    const blockCount = THREE.MathUtils.randInt(18, 34);
+    for (let i = 0; i < blockCount; i += 1) {
+      const color = palette[THREE.MathUtils.randInt(0, palette.length - 1)];
+      const blockWidth = THREE.MathUtils.randInt(6, Math.max(12, Math.floor(width * 0.11)));
+      const blockHeight = THREE.MathUtils.randInt(2, Math.max(3, Math.floor(height * 0.018)));
+      const alpha = THREE.MathUtils.randFloat(0.12, 0.58);
+      glitchContext.fillStyle = `rgba(${color[0]}, ${color[1]}, ${color[2]}, ${alpha})`;
+      glitchContext.fillRect(
+        THREE.MathUtils.randInt(-20, width),
+        THREE.MathUtils.randInt(0, height),
+        blockWidth,
+        blockHeight
+      );
+    }
+
+    const sparkCount = THREE.MathUtils.randInt(34, 64);
+    glitchContext.globalCompositeOperation = "lighter";
+    for (let i = 0; i < sparkCount; i += 1) {
+      const color = palette[THREE.MathUtils.randInt(0, palette.length - 1)];
+      const x = THREE.MathUtils.randInt(0, width);
+      const y = THREE.MathUtils.randInt(0, height);
+      const length = THREE.MathUtils.randInt(2, 14);
+      glitchContext.fillStyle = `rgba(${color[0]}, ${color[1]}, ${color[2]}, ${THREE.MathUtils.randFloat(0.16, 0.62)})`;
+      glitchContext.fillRect(x, y, length, 1);
+    }
+
+    glitchContext.globalCompositeOperation = "source-over";
+  };
+
+  const randomizeGlitch = () => {
+    if (!glitchLayer) {
+      return;
+    }
+
+    const wideShift = THREE.MathUtils.randInt(-24, 24);
+    const canvasShift = THREE.MathUtils.randInt(-10, 10);
+    document.documentElement.style.setProperty("--glitch-canvas-x", `${canvasShift}px`);
+    document.documentElement.style.setProperty("--glitch-hue", `${THREE.MathUtils.randFloat(-7, 7).toFixed(2)}deg`);
+    glitchLayer.style.setProperty("--glitch-wide-x", `${wideShift}px`);
+    glitchLayer.style.setProperty("--glitch-opacity", THREE.MathUtils.randFloat(0.72, 1).toFixed(2));
+    glitchLayer.style.setProperty("--noise-opacity", THREE.MathUtils.randFloat(0.58, 0.9).toFixed(2));
+    glitchLayer.style.setProperty("--slice-opacity", THREE.MathUtils.randFloat(0.18, 0.42).toFixed(2));
+
+    glitchSlices.forEach((slice) => {
+      slice.style.setProperty("--slice-y", `${THREE.MathUtils.randFloat(4, 92).toFixed(2)}%`);
+      slice.style.setProperty("--slice-h", `${THREE.MathUtils.randFloat(0.35, 2.2).toFixed(2)}vh`);
+      slice.style.setProperty("--slice-x", `${THREE.MathUtils.randInt(-28, 28)}px`);
+      slice.style.setProperty("--slice-skew", `${THREE.MathUtils.randFloat(-4.5, 4.5).toFixed(2)}deg`);
+    });
+  };
+
+  const updateGlitch = (elapsed) => {
+    if (!glitchLayer || reduceMotion) {
+      return;
+    }
+
+    if (elapsed > nextGlitchAt) {
+      randomizeGlitch();
+      glitchUntil = elapsed + THREE.MathUtils.randFloat(0.075, 0.18);
+      nextGlitchAt = elapsed + THREE.MathUtils.randFloat(3.8, 9.2);
+      glitchLayer.classList.add("is-active");
+      document.documentElement.classList.add("cyber-glitching");
+    }
+
+    if (elapsed > glitchUntil && glitchLayer.classList.contains("is-active")) {
+      glitchLayer.classList.remove("is-active");
+      document.documentElement.classList.remove("cyber-glitching");
+      document.documentElement.style.removeProperty("--glitch-canvas-x");
+      document.documentElement.style.removeProperty("--glitch-hue");
+      if (glitchContext && glitchCanvas) {
+        glitchContext.clearRect(0, 0, glitchCanvas.width, glitchCanvas.height);
+      }
+    } else if (elapsed < glitchUntil && Math.random() < 0.16) {
+      randomizeGlitch();
+    }
+
+    if (elapsed < glitchUntil) {
+      drawGlitchNoise();
+    }
+  };
+
   const render = () => {
     const elapsed = clock.getElapsedTime();
     const scrollable = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
@@ -903,6 +1030,7 @@
     signGroup.rotation.y = -0.09 + pointerCurrent.x * 0.045;
     signGroup.rotation.x = pointerCurrent.y * 0.012;
     updateLights(elapsed);
+    updateGlitch(elapsed);
 
     renderBackgroundTarget();
     renderer.render(scene, camera);
