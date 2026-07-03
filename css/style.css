@@ -392,7 +392,11 @@ main,
 }
 
 .hero-stage {
-  display: none;
+  position: relative;
+  min-height: 560px;
+  display: grid;
+  place-items: center;
+  perspective: 1200px;
 }
 
 .precision-frame {
