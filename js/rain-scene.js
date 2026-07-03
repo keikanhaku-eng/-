@@ -51,8 +51,37 @@
   const clock = new THREE.Clock();
   const lookTarget = new THREE.Vector3(2.4, 0.35, -15.8);
   const dynamicLookTarget = lookTarget.clone();
+  const baseCameraPosition = new THREE.Vector3(0.4, 1.82, 8.6);
+  const cameraCurrentPosition = baseCameraPosition.clone();
+  const cameraTargetPosition = baseCameraPosition.clone();
+  const cameraCurrentLookTarget = lookTarget.clone();
+  const cameraTargetLookTarget = lookTarget.clone();
   const pointerTarget = new THREE.Vector2(0, 0);
   const pointerCurrent = new THREE.Vector2(0, 0);
+  const storyElement = document.querySelector(".story");
+  const storyPanelOrder = ["profile", "hobby", "career"];
+  const storyPanels = storyPanelOrder
+    .map((name) => document.querySelector(`.story-panel[data-panel="${name}"]`))
+    .filter(Boolean);
+  const storyPanelCount = Math.max(1, storyPanels.length);
+  const storyPageCount = Math.max(
+    storyPanelCount,
+    storyPanels.reduce((total, panel) => total + panel.querySelectorAll("[data-page]").length, 0)
+  );
+  const scrollCameraViews = [
+    {
+      position: new THREE.Vector3(0.45, 2.72, 8.2),
+      target: new THREE.Vector3(2.45, 0.62, -15.9),
+    },
+    {
+      position: new THREE.Vector3(-1.15, 2.34, 8.35),
+      target: new THREE.Vector3(2.0, 0.48, -15.95),
+    },
+    {
+      position: new THREE.Vector3(1.55, 2.25, 9.1),
+      target: new THREE.Vector3(2.82, 0.46, -16.12),
+    },
+  ];
   const bgTarget = new THREE.WebGLRenderTarget(2, 2, {
     depthBuffer: true,
     stencilBuffer: false,
@@ -889,19 +918,78 @@
     }
   };
 
+  const easeScroll = (value) => {
+    const clamped = THREE.MathUtils.clamp(value, 0, 1);
+    return clamped * clamped * (3 - clamped * 2);
+  };
+
+  const getStoryCameraState = () => {
+    if (!storyElement) {
+      return { focus: 0, progress: 0 };
+    }
+
+    const scrollY = window.scrollY || window.pageYOffset || 0;
+    const storyTop = storyElement.getBoundingClientRect().top + scrollY;
+    const desktop = window.matchMedia("(min-width: 981px)").matches;
+    const storyDuration = desktop
+      ? storyPageCount * 680
+      : Math.max(window.innerHeight, storyElement.offsetHeight - window.innerHeight);
+    const leadIn = Math.max(240, window.innerHeight * 0.72);
+    const leadOut = Math.max(260, window.innerHeight * 0.62);
+    const storyEnd = storyTop + storyDuration;
+    const enter = easeScroll((scrollY - (storyTop - leadIn)) / leadIn);
+    const exit = 1 - easeScroll((scrollY - storyEnd) / leadOut);
+    const focus = enter * exit;
+    const progress = THREE.MathUtils.clamp((scrollY - storyTop) / Math.max(1, storyDuration), 0, 1);
+
+    return { focus, progress };
+  };
+
+  const updateScrollCamera = () => {
+    const { focus, progress } = getStoryCameraState();
+
+    if (focus <= 0.001) {
+      cameraTargetPosition.copy(baseCameraPosition);
+      cameraTargetLookTarget.copy(lookTarget);
+    } else {
+      const chapterProgress = progress * storyPanelCount;
+      const currentIndex = THREE.MathUtils.clamp(
+        Math.floor(chapterProgress),
+        0,
+        scrollCameraViews.length - 1
+      );
+      const localProgress = chapterProgress - currentIndex;
+      const transitionStart = 0.82;
+      const transitionProgress =
+        currentIndex < scrollCameraViews.length - 1
+          ? easeScroll((localProgress - transitionStart) / (1 - transitionStart))
+          : 0;
+      const currentView = scrollCameraViews[currentIndex];
+      const nextView = scrollCameraViews[Math.min(currentIndex + 1, scrollCameraViews.length - 1)];
+
+      cameraTargetPosition.lerpVectors(currentView.position, nextView.position, transitionProgress);
+      cameraTargetLookTarget.lerpVectors(currentView.target, nextView.target, transitionProgress);
+      cameraTargetPosition.lerpVectors(baseCameraPosition, cameraTargetPosition, focus);
+      cameraTargetLookTarget.lerpVectors(lookTarget, cameraTargetLookTarget, focus);
+    }
+
+    cameraCurrentPosition.lerp(cameraTargetPosition, 0.045);
+    cameraCurrentLookTarget.lerp(cameraTargetLookTarget, 0.045);
+  };
+
   const render = () => {
     const elapsed = clock.getElapsedTime();
-    const scrollable = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
-    const scrollProgress = window.scrollY / scrollable;
     pointerCurrent.lerp(pointerTarget, 0.075);
+    updateScrollCamera();
 
-    camera.position.x = 0.4 + pointerCurrent.x * 0.5;
-    camera.position.y = 1.82 - scrollProgress * 0.18 - pointerCurrent.y * 0.22;
-    camera.position.z = 8.6 + Math.abs(pointerCurrent.x) * 0.08;
+    camera.position.copy(cameraCurrentPosition);
+    camera.position.x += pointerCurrent.x * 0.5;
+    camera.position.y -= pointerCurrent.y * 0.22;
+    camera.position.z += Math.abs(pointerCurrent.x) * 0.08;
     dynamicLookTarget.set(
-      lookTarget.x + pointerCurrent.x * 0.95,
-      lookTarget.y - pointerCurrent.y * 0.38,
-      lookTarget.z
+      cameraCurrentLookTarget.x + pointerCurrent.x * 0.95,
+      cameraCurrentLookTarget.y - pointerCurrent.y * 0.38,
+      cameraCurrentLookTarget.z
     );
     camera.lookAt(dynamicLookTarget);
 
