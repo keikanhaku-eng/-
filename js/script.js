@@ -355,7 +355,22 @@
         anticipatePin: 1,
       },
     })
-    .to("[data-hero-copy]", { y: -90, autoAlpha: 0, filter: "blur(16px)", duration: 0.62 }, 0.38)
+    .fromTo(
+      "[data-hero-copy]",
+      { y: 0, autoAlpha: 1, filter: "blur(0px)" },
+      { y: 0, autoAlpha: 1, filter: "blur(0px)", duration: 0.38 },
+      0
+    )
+    .to(
+      "[data-hero-copy]",
+      {
+        y: -90,
+        autoAlpha: 0,
+        filter: "blur(16px)",
+        duration: 0.62,
+      },
+      0.38
+    )
     .to("[data-stage-core]", { rotateY: 28, rotateX: -8, scale: 0.92, duration: 0.62 }, 0.38)
     .to("[data-layer='front']", { x: 84, y: -28, rotateY: 24, duration: 0.62 }, 0.38)
     .to("[data-layer='middle']", { x: 20, y: 12, rotateY: -4, duration: 0.62 }, 0.38)

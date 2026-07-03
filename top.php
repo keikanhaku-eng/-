@@ -29,7 +29,7 @@
       defer
       src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/ScrollTrigger.min.js"
     ></script>
-    <script defer src="js/script.js?v=intro-sequence-20260703-1"></script>
+    <script defer src="js/script.js?v=intro-sequence-20260703-3"></script>
   </head>
   <body>
     <div class="background-system" aria-hidden="true">
