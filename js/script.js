@@ -2,6 +2,24 @@
   const root = document.documentElement;
   const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const hasGsap = window.gsap && window.ScrollTrigger;
+  const sceneFocusToggle = document.querySelector("[data-scene-focus-toggle]");
+
+  if (sceneFocusToggle) {
+    const setSceneFocus = (enabled) => {
+      root.classList.toggle("scene-focus-mode", enabled);
+      sceneFocusToggle.setAttribute("aria-pressed", String(enabled));
+    };
+
+    sceneFocusToggle.addEventListener("click", () => {
+      setSceneFocus(!root.classList.contains("scene-focus-mode"));
+    });
+
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && root.classList.contains("scene-focus-mode")) {
+        setSceneFocus(false);
+      }
+    });
+  }
 
   if (!hasGsap || reduceMotion) {
     root.classList.add("no-cinematic");

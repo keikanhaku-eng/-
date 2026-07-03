@@ -21,7 +21,7 @@
       content="中国出身の敬涵博（ケイ）の自己紹介ページ。学習経験、資格、強み、趣味、今後の目標を紹介します。"
     />
     <title>敬涵博（ケイ） | 自己紹介</title>
-    <link rel="stylesheet" href="css/style.css?v=intro-sequence-20260703-1" />
+    <link rel="stylesheet" href="css/style.css?v=scene-focus-20260703-1" />
     <script defer src="https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.min.js"></script>
     <script defer src="js/rain-scene.js?v=rain-scroll-camera-20260703-3"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
@@ -29,7 +29,7 @@
       defer
       src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/ScrollTrigger.min.js"
     ></script>
-    <script defer src="js/script.js?v=intro-sequence-20260703-3"></script>
+    <script defer src="js/script.js?v=scene-focus-20260703-1"></script>
   </head>
   <body>
     <div class="background-system" aria-hidden="true">
@@ -82,7 +82,7 @@
     </div>
 
     <header class="site-header" data-animate="header">
-      <a class="brand" href="#top" aria-label="ページ上部へ">Kei</a>
+      <button class="brand" type="button" data-scene-focus-toggle aria-label="3Dシーン表示を切り替え" aria-pressed="false">Kei</button>
       <nav class="site-nav" aria-label="ページ内ナビゲーション">
         <a href="#top">TOP</a>
         <a href="#profile">プロフィール</a>
