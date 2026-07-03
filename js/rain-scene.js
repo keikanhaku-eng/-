@@ -58,83 +58,6 @@
     stencilBuffer: false,
   });
 
-  const hash = (x, y, seed = 0) => {
-    const n = Math.sin(x * 127.1 + y * 311.7 + seed * 74.7) * 43758.5453123;
-    return n - Math.floor(n);
-  };
-
-  const makeCanvasTexture = (size, painter, colorTexture = false) => {
-    const canvas = document.createElement("canvas");
-    canvas.width = size;
-    canvas.height = size;
-    const ctx = canvas.getContext("2d", { willReadFrequently: true });
-    painter(ctx, size);
-    const texture = new THREE.CanvasTexture(canvas);
-    texture.wrapS = THREE.RepeatWrapping;
-    texture.wrapT = THREE.RepeatWrapping;
-    texture.needsUpdate = true;
-    if (colorTexture && "colorSpace" in texture) {
-      texture.colorSpace = THREE.SRGBColorSpace;
-    }
-    return texture;
-  };
-
-  const asphaltMap = makeCanvasTexture(512, (ctx, size) => {
-    const image = ctx.createImageData(size, size);
-    for (let y = 0; y < size; y += 1) {
-      for (let x = 0; x < size; x += 1) {
-        const i = (y * size + x) * 4;
-        const grain = hash(x >> 1, y >> 1, 3) * 35 + hash(x >> 3, y >> 3, 9) * 28;
-        const seam = x % 128 < 2 || y % 176 < 2 ? 18 : 0;
-        const wet = hash(x >> 4, y >> 4, 21) > 0.66 ? 20 : 0;
-        const value = Math.max(9, Math.min(78, 22 + grain - seam + wet));
-        image.data[i] = value * 0.7;
-        image.data[i + 1] = value * 0.86;
-        image.data[i + 2] = value;
-        image.data[i + 3] = 255;
-      }
-    }
-    ctx.putImageData(image, 0, 0);
-  }, true);
-  asphaltMap.repeat.set(5, 13);
-
-  const asphaltNormal = makeCanvasTexture(512, (ctx, size) => {
-    const image = ctx.createImageData(size, size);
-    for (let y = 0; y < size; y += 1) {
-      for (let x = 0; x < size; x += 1) {
-        const i = (y * size + x) * 4;
-        const left = hash(x - 1, y, 4);
-        const right = hash(x + 1, y, 4);
-        const up = hash(x, y - 1, 4);
-        const down = hash(x, y + 1, 4);
-        image.data[i] = 128 + (left - right) * 80;
-        image.data[i + 1] = 128 + (up - down) * 80;
-        image.data[i + 2] = 218;
-        image.data[i + 3] = 255;
-      }
-    }
-    ctx.putImageData(image, 0, 0);
-  }, true);
-  asphaltNormal.repeat.set(5, 13);
-
-  const roughnessMap = makeCanvasTexture(512, (ctx, size) => {
-    const image = ctx.createImageData(size, size);
-    for (let y = 0; y < size; y += 1) {
-      for (let x = 0; x < size; x += 1) {
-        const i = (y * size + x) * 4;
-        const puddle = hash(x >> 5, y >> 5, 18) > 0.58 ? 42 : 118;
-        const grain = hash(x >> 2, y >> 2, 5) * 38;
-        const value = Math.max(34, Math.min(180, puddle + grain));
-        image.data[i] = value;
-        image.data[i + 1] = value;
-        image.data[i + 2] = value;
-        image.data[i + 3] = 255;
-      }
-    }
-    ctx.putImageData(image, 0, 0);
-  });
-  roughnessMap.repeat.set(5, 13);
-
   const textureLoader = new THREE.TextureLoader();
   const maxAnisotropy = renderer.capabilities.getMaxAnisotropy();
   const loadRepeatingTexture = (path, repeatX, repeatY, colorTexture = false) => {
@@ -166,26 +89,90 @@
   );
   const rainWallHeight = loadRepeatingTexture("raintx/Water_Droplets_001_height.png", wallRepeatX, wallRepeatY);
 
+  const groundRepeatX = 7;
+  const groundRepeatY = 12.4;
+  const asphaltBaseMap = loadRepeatingTexture(
+    "asphalt%20texture/Asphalt_001_COLOR.png",
+    groundRepeatX,
+    groundRepeatY,
+    true
+  );
+  const asphaltNormalMap = loadRepeatingTexture(
+    "asphalt%20texture/Asphalt_001_NRM.png",
+    groundRepeatX,
+    groundRepeatY
+  );
+  const asphaltAoMap = loadRepeatingTexture(
+    "asphalt%20texture/Asphalt_001_OCC.png",
+    groundRepeatX,
+    groundRepeatY
+  );
+  const asphaltBumpMap = loadRepeatingTexture(
+    "asphalt%20texture/Asphalt_001_DISP.png",
+    groundRepeatX,
+    groundRepeatY
+  );
+  const asphaltSpecMap = loadRepeatingTexture(
+    "asphalt%20texture/Asphalt_001_SPEC.png",
+    groundRepeatX,
+    groundRepeatY
+  );
+  const rainGroundNormal = loadRepeatingTexture(
+    "raintx/Water_Droplets_001_normal.jpg",
+    groundRepeatX * 1.18,
+    groundRepeatY * 1.18
+  );
+  const rainGroundRoughness = loadRepeatingTexture(
+    "raintx/Water_Droplets_001_roughness.jpg",
+    groundRepeatX * 1.18,
+    groundRepeatY * 1.18
+  );
+
   const enableAoMap = (mesh) => {
     if (mesh.geometry.attributes.uv && !mesh.geometry.attributes.uv2) {
       mesh.geometry.setAttribute("uv2", mesh.geometry.attributes.uv.clone());
     }
   };
 
-  const groundMaterial = new THREE.MeshStandardMaterial({
-    color: "#223031",
-    map: asphaltMap,
-    normalMap: asphaltNormal,
-    normalScale: new THREE.Vector2(0.58, 0.58),
-    roughnessMap,
-    roughness: 0.08,
-    metalness: 0.62,
+  const groundMaterial = new THREE.MeshPhysicalMaterial({
+    color: "#101514",
+    map: asphaltBaseMap,
+    normalMap: asphaltNormalMap,
+    normalScale: new THREE.Vector2(0.72, 0.72),
+    aoMap: asphaltAoMap,
+    aoMapIntensity: 0.78,
+    bumpMap: asphaltBumpMap,
+    bumpScale: 0.018,
+    roughness: 0.22,
+    metalness: 0.12,
+    clearcoat: 0.72,
+    clearcoatMap: asphaltSpecMap,
+    clearcoatRoughness: 0.08,
   });
 
   const ground = new THREE.Mesh(new THREE.PlaneGeometry(44, 78, 1, 1), groundMaterial);
   ground.rotation.x = -Math.PI / 2;
   ground.position.set(0, -2.1, -18);
+  enableAoMap(ground);
   scene.add(ground);
+
+  const waterFilmMaterial = new THREE.MeshStandardMaterial({
+    color: "#0b2424",
+    normalMap: rainGroundNormal,
+    normalScale: new THREE.Vector2(0.22, 0.22),
+    roughnessMap: rainGroundRoughness,
+    roughness: 0.035,
+    metalness: 0.18,
+    transparent: true,
+    opacity: 0.18,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+  });
+
+  const waterFilm = new THREE.Mesh(new THREE.PlaneGeometry(44, 78, 1, 1), waterFilmMaterial);
+  waterFilm.rotation.x = -Math.PI / 2;
+  waterFilm.position.set(0, -2.055, -18);
+  scene.add(waterFilm);
 
   const makeGroundGrid = () => {
     const positions = [];
