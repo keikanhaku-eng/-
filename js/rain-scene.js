@@ -593,8 +593,8 @@
   coolBackLight2.position.set(13, 7.4, -25);
   scene.add(coolBackLight2);
 
-  const helper = new THREE.PointLightHelper(coolBackLight2, 0.5);
-scene.add(helper);
+//   const helper = new THREE.PointLightHelper(coolBackLight2, 0.5);
+// scene.add(helper);
 
   const warmBackLight = new THREE.PointLight("#ffe0c9", 2.1, 36, 1.82);
   warmBackLight.position.set(-10.8, 3.3, -18.6);
