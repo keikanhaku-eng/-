@@ -1380,7 +1380,7 @@ main,
 }
 
 .story-panel + .story-panel {
-  margin-top: 96px;
+  margin-top: 10px;
 }
 
 .story-panel h2 {

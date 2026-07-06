@@ -21,15 +21,15 @@
       content="中国出身の敬涵博（ケイ）の自己紹介ページ。学習経験、資格、強み、趣味、今後の目標を紹介します。"
     />
     <title>敬涵博（ケイ） | 自己紹介</title>
-    <link rel="stylesheet" href="css/style.css?v=scene-focus-20260703-1" />
+    <link rel="stylesheet" href="css/style.css?v=rain-scene-20260702-2" />
     <script defer src="https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.min.js"></script>
-    <script defer src="js/rain-scene.js?v=rain-scroll-camera-20260703-3"></script>
+    <script defer src="js/rain-scene.js?v=rain-scene-20260702-4"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
     <script
       defer
       src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/ScrollTrigger.min.js"
     ></script>
-    <script defer src="js/script.js?v=scene-focus-20260703-1"></script>
+    <script defer src="js/script.js"></script>
   </head>
   <body>
     <div class="background-system" aria-hidden="true">
@@ -38,51 +38,9 @@
       <div class="grid-layer"></div>
       <div class="scan-layer"></div>
     </div>
-    <div class="cyber-glitch" data-cyber-glitch aria-hidden="true">
-      <span></span>
-      <span></span>
-      <span></span>
-      <span></span>
-      <span></span>
-    </div>
-    <div class="intro-sequence" data-intro>
-      <div class="intro-grid" aria-hidden="true">
-        <span></span>
-        <span></span>
-        <span></span>
-        <span></span>
-      </div>
-      <div class="intro-scan" data-intro-scan aria-hidden="true"></div>
-      <button class="intro-skip" type="button" data-intro-skip aria-label="オープニングをスキップ">
-        SKIP
-      </button>
-      <div class="intro-core" data-intro-core>
-        <div class="intro-frame" data-intro-frame aria-hidden="true">
-          <span></span>
-          <span></span>
-          <span></span>
-          <span></span>
-        </div>
-        <div class="intro-title" data-intro-title>
-          <span class="intro-kicker">PROFILE INITIALIZED</span>
-          <strong data-intro-name>敬涵博</strong>
-          <span class="intro-sub" data-intro-sub>KEI / ENGINEER IN TRAINING</span>
-        </div>
-        <div class="intro-plates" aria-hidden="true">
-          <span class="intro-plate intro-plate-back" data-intro-plate="back">Learning</span>
-          <span class="intro-plate intro-plate-middle" data-intro-plate="middle">Culture</span>
-          <span class="intro-plate intro-plate-front" data-intro-plate="front">敬</span>
-        </div>
-        <div class="intro-status" aria-hidden="true">
-          <span data-intro-status></span>
-          <span data-intro-status></span>
-          <span data-intro-status></span>
-        </div>
-      </div>
-    </div>
 
     <header class="site-header" data-animate="header">
-      <button class="brand" type="button" data-scene-focus-toggle aria-label="3Dシーン表示を切り替え" aria-pressed="false">Kei</button>
+      <a class="brand" href="#top" aria-label="ページ上部へ">Kei</a>
       <nav class="site-nav" aria-label="ページ内ナビゲーション">
         <a href="#top">TOP</a>
         <a href="#profile">プロフィール</a>
@@ -215,16 +173,7 @@
                   </div>
                 </div>
               </div>
-              <div class="body-copy">
-                <p>
-                  中国出身の敬涵博（ケイ）です。日本で情報処理を学び、ITパスポート、
-                  ビジネス能力検定3級、基本情報技術者などの資格を取得しました。
-                </p>
-                <p>
-                  現在は新人ITエンジニアとして、JavaやSQL、開発の流れを着実に学びながら、
-                  早くチームに貢献できるよう努力しています。
-                </p>
-              </div>
+             
             </article>
 
             <article id="career" class="story-panel" data-panel="career" data-word="Career">
@@ -266,16 +215,7 @@
                   </div>
                 </div>
               </div>
-              <div class="body-copy">
-                <p>
-                  来日後、専門学校で情報処理を学びました。学習だけでなく、
-                  生活や人との関わり方も含めて、新しい環境に一つずつ適応してきました。
-                </p>
-                <p>
-                  その経験を通して、状況を理解してから行動すること、責任を持って取り組むこと、
-                  そして継続して学ぶことの大切さを実感しました。
-                </p>
-              </div>
+            
             </article>
 
             <article id="skills" class="story-panel" data-panel="skills" hidden>
@@ -293,27 +233,7 @@
               </div>
             </article>
 
-            <article id="strengths" class="story-panel" data-panel="strengths" hidden>
-              
-              <h2>仕事で活かしたい強み</h2>
-              <div class="card-grid">
-                <section class="info-card">
-                  <span class="card-number">01</span>
-                  <h3>継続して学ぶ姿勢</h3>
-                  <p>基礎を大切にしながら、分からないことを一つずつ確認します。</p>
-                </section>
-                <section class="info-card">
-                  <span class="card-number">02</span>
-                  <h3>異文化での対話</h3>
-                  <p>相手の立場や背景を理解しながら、落ち着いてコミュニケーションします。</p>
-                </section>
-                <section class="info-card">
-                  <span class="card-number">03</span>
-                  <h3>責任感と主体性</h3>
-                  <p>任されたことに丁寧に向き合い、状況を整理して行動します。</p>
-                </section>
-              </div>
-            </article>
+          
 
             <article id="hobby" class="story-panel" data-panel="hobby" data-word="Hobby">
             
@@ -366,20 +286,7 @@
               </div>
             </article>
 
-            <article id="goal" class="story-panel" data-panel="goal" hidden>
-            
-              <h2>今後の目標</h2>
-              <div class="body-copy">
-                <p>
-                  まずはJavaやSQL、業務知識、会社の開発ルールを着実に身につけ、
-                  チームに安定して貢献できるエンジニアになることを目標にしています。
-                </p>
-                <p>
-                  将来的には、AIなどの新しい技術も活用しながら、技術面だけでなく、
-                  チームや業務にも貢献できる人材を目指したいです。
-                </p>
-              </div>
-            </article>
+           
           </div>
         </div>
       </section>
