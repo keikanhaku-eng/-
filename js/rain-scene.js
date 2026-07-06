@@ -574,19 +574,19 @@
   scene.add(ambient);
 
   const signLight = new THREE.PointLight("#44d6c4", 6.2, 42, 1.65);
-  signLight.position.set(3.7, 4.7, -19.4);
+  signLight.position.set(5.1, 4.7, -19.4);
   scene.add(signLight);
 
   const signRimLight = new THREE.PointLight("#e8fffb", 1.8, 18, 1.55);
-  signRimLight.position.set(3.7, 4.7, -19.4);
+  signRimLight.position.set(2.6, 6.15, -23.4);
   scene.add(signRimLight);
 
   const warmLight = new THREE.PointLight("#ff8a62", 2.7, 34, 1.55);
-  warmLight.position.set(3.7, 3.7, -20);
+  warmLight.position.set(12.2, 3.7, -16.2);
   scene.add(warmLight);
 
-  const coolBackLight = new THREE.PointLight("#d7fbff", 2.7, 46, 1.75);
-  coolBackLight.position.set(12, 2.6, -25);
+  const coolBackLight = new THREE.PointLight("#d7fbff", 4.2, 46, 1.75);
+  coolBackLight.position.set(14, 5.4, -18.2);
   scene.add(coolBackLight);
 
   const coolBackLight2 = new THREE.PointLight("#d7fbff", 2.7, 46, 1.75);
@@ -873,6 +873,160 @@
     { passive: true }
   );
 
+  const soundToggle = document.querySelector("[data-sound-toggle]");
+  let audioContext = null;
+  let masterGain = null;
+  let soundEnabled = false;
+  let rainLoopGain = null;
+  let buzzToneGain = null;
+  let buzzNoiseGain = null;
+
+  const createNoiseBuffer = (ctx, duration) => {
+    const length = Math.max(1, Math.floor(ctx.sampleRate * duration));
+    const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < length; i += 1) {
+      data[i] = Math.random() * 2 - 1;
+    }
+    return buffer;
+  };
+
+  const buildSceneAudio = () => {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) {
+      return false;
+    }
+    audioContext = new AudioContextClass();
+    masterGain = audioContext.createGain();
+    masterGain.gain.value = 0;
+    masterGain.connect(audioContext.destination);
+
+   const rainSource = audioContext.createBufferSource();
+rainSource.loop = true;
+rainLoopGain = audioContext.createGain();
+rainLoopGain.gain.value = 0.5;
+rainSource.connect(rainLoopGain);
+rainLoopGain.connect(masterGain);
+
+fetch("audio/rain.mp3")
+  .then((response) => response.arrayBuffer())
+  .then((data) => audioContext.decodeAudioData(data))
+  .then((buffer) => {
+    rainSource.buffer = buffer;
+    rainSource.start();
+  });
+
+    const gustLfo = audioContext.createOscillator();
+    gustLfo.frequency.value = 0.06;
+    const gustLfoGain = audioContext.createGain();
+    gustLfoGain.gain.value = 0.1;
+    gustLfo.connect(gustLfoGain);
+    gustLfoGain.connect(rainLoopGain.gain);
+    gustLfo.start();
+
+    const buzzTone = audioContext.createOscillator();
+    buzzTone.type = "sawtooth";
+    buzzTone.frequency.value = 94;
+    buzzToneGain = audioContext.createGain();
+    buzzToneGain.gain.value = 0.015;
+    buzzTone.connect(buzzToneGain);
+    buzzToneGain.connect(masterGain);
+    buzzTone.start();
+
+    const buzzNoiseSource = audioContext.createBufferSource();
+    buzzNoiseSource.buffer = createNoiseBuffer(audioContext, 2);
+    buzzNoiseSource.loop = true;
+    const buzzNoiseFilter = audioContext.createBiquadFilter();
+    buzzNoiseFilter.type = "bandpass";
+    buzzNoiseFilter.frequency.value = 2500;
+    buzzNoiseFilter.Q.value = 0.7;
+    buzzNoiseGain = audioContext.createGain();
+    buzzNoiseGain.gain.value = 0;
+    buzzNoiseSource.connect(buzzNoiseFilter);
+    buzzNoiseFilter.connect(buzzNoiseGain);
+    buzzNoiseGain.connect(masterGain);
+    buzzNoiseSource.start();
+
+    return true;
+  };
+
+  const updateSignBuzzAudio = (power) => {
+    if (!audioContext || !buzzToneGain || !buzzNoiseGain) {
+      return;
+    }
+    const instability = THREE.MathUtils.clamp(Math.abs(power - 1) * 0.45, 0, 1);
+    const now = audioContext.currentTime;
+    buzzToneGain.gain.setTargetAtTime(0.015 + instability * 0.05, now, 0.03);
+    buzzNoiseGain.gain.setTargetAtTime(instability * 0.18, now, 0.02);
+  };
+
+  const playThunderSound = (strong) => {
+    if (!audioContext || !masterGain) {
+      return;
+    }
+    const now = audioContext.currentTime;
+    const delay = strong
+      ? THREE.MathUtils.randFloat(0.05, 0.16)
+      : THREE.MathUtils.randFloat(0.25, 0.7);
+
+    const crackSource = audioContext.createBufferSource();
+    crackSource.buffer = createNoiseBuffer(audioContext, 0.3);
+    const crackFilter = audioContext.createBiquadFilter();
+    crackFilter.type = "bandpass";
+    crackFilter.frequency.value = 1400;
+    crackFilter.Q.value = 0.6;
+    const crackGain = audioContext.createGain();
+    crackGain.gain.value = 0;
+    crackSource.connect(crackFilter);
+    crackFilter.connect(crackGain);
+    crackGain.connect(masterGain);
+    const crackStart = now + delay;
+    crackGain.gain.setValueAtTime(0, crackStart);
+    crackGain.gain.linearRampToValueAtTime(strong ? 0.9 : 0.5, crackStart + 0.012);
+    crackGain.gain.exponentialRampToValueAtTime(0.001, crackStart + 0.26);
+    crackSource.start(crackStart);
+    crackSource.stop(crackStart + 0.32);
+
+    const rumbleSource = audioContext.createBufferSource();
+    rumbleSource.buffer = createNoiseBuffer(audioContext, 2.4);
+    const rumbleFilter = audioContext.createBiquadFilter();
+    rumbleFilter.type = "lowpass";
+    rumbleFilter.frequency.value = 170;
+    const rumbleGain = audioContext.createGain();
+    rumbleGain.gain.value = 0;
+    rumbleSource.connect(rumbleFilter);
+    rumbleFilter.connect(rumbleGain);
+    rumbleGain.connect(masterGain);
+    const rumbleStart = crackStart + 0.05;
+    const rumbleDuration = strong ? 2.6 : 1.8;
+    rumbleGain.gain.setValueAtTime(0, rumbleStart);
+    rumbleGain.gain.linearRampToValueAtTime(strong ? 0.55 : 0.32, rumbleStart + 0.2);
+    rumbleGain.gain.exponentialRampToValueAtTime(0.001, rumbleStart + rumbleDuration);
+    rumbleSource.start(rumbleStart);
+    rumbleSource.stop(rumbleStart + rumbleDuration + 0.1);
+  };
+
+  if (soundToggle) {
+    soundToggle.addEventListener("click", () => {
+      if (!audioContext) {
+        const ready = buildSceneAudio();
+        if (!ready) {
+          soundToggle.disabled = true;
+          soundToggle.setAttribute("aria-pressed", "false");
+          return;
+        }
+      }
+      if (audioContext.state === "suspended") {
+        audioContext.resume();
+      }
+      soundEnabled = !soundEnabled;
+      soundToggle.setAttribute("aria-pressed", String(soundEnabled));
+      const now = audioContext.currentTime;
+      masterGain.gain.cancelScheduledValues(now);
+      masterGain.gain.setTargetAtTime(soundEnabled ? 0.85 : 0, now, 0.3);
+    });
+  }
+
   let animationFrame = 0;
   let nextFlickerAt = 1.6;
   let flickerUntil = 0;
@@ -889,6 +1043,7 @@
 
     const power = elapsed < flickerUntil ? flickerPower : 1;
     const flash = Math.max(0, power - 1);
+    updateSignBuzzAudio(power);
     const signBoost = 1 + flash * 0.5;
     const glowBoost = 1 + flash * 0.74;
     signBodyMaterial.color.setRGB(0.82 * signBoost, 1 * signBoost, 0.98 * signBoost);
@@ -923,12 +1078,14 @@
     if (showBolt) {
       regenerateBolt();
     }
+    const strong = Math.random() < 0.4;
+    playThunderSound(strong);
     activeLightningStrike = {
       start: elapsed,
       pulses,
       duration: cursor + 0.3,
       showBolt,
-      strong: Math.random() < 0.4,
+      strong,
     };
   };
 
