@@ -894,22 +894,20 @@
     masterGain.gain.value = 0;
     masterGain.connect(audioContext.destination);
 
-    const rainSource = audioContext.createBufferSource();
-    rainSource.buffer = createNoiseBuffer(audioContext, 4);
-    rainSource.loop = true;
-    const rainHighpass = audioContext.createBiquadFilter();
-    rainHighpass.type = "highpass";
-    rainHighpass.frequency.value = 900;
-    const rainLowpass = audioContext.createBiquadFilter();
-    rainLowpass.type = "lowpass";
-    rainLowpass.frequency.value = 5200;
-    rainLoopGain = audioContext.createGain();
-    rainLoopGain.gain.value = 0.5;
-    rainSource.connect(rainHighpass);
-    rainHighpass.connect(rainLowpass);
-    rainLowpass.connect(rainLoopGain);
-    rainLoopGain.connect(masterGain);
+   const rainSource = audioContext.createBufferSource();
+rainSource.loop = true;
+rainLoopGain = audioContext.createGain();
+rainLoopGain.gain.value = 0.5;
+rainSource.connect(rainLoopGain);
+rainLoopGain.connect(masterGain);
+
+fetch("audio/rain.mp3")
+  .then((response) => response.arrayBuffer())
+  .then((data) => audioContext.decodeAudioData(data))
+  .then((buffer) => {
+    rainSource.buffer = buffer;
     rainSource.start();
+  });
 
     const gustLfo = audioContext.createOscillator();
     gustLfo.frequency.value = 0.06;
