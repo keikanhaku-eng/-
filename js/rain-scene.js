@@ -573,7 +573,7 @@
   scene.add(ambient);
 
   const signLight = new THREE.PointLight("#44d6c4", 6.2, 42, 1.65);
-  signLight.position.set(5.1, 4.7, -19.4);
+  signLight.position.set(3.7, 4.7, -19.4);
   scene.add(signLight);
 
   const signRimLight = new THREE.PointLight("#e8fffb", 1.8, 18, 1.55);
@@ -581,7 +581,7 @@
   scene.add(signRimLight);
 
   const warmLight = new THREE.PointLight("#ff8a62", 2.7, 34, 1.55);
-  warmLight.position.set(12.2, 3.7, -16.2);
+  warmLight.position.set(3.7, 3.7, -20);
   scene.add(warmLight);
 
   const coolBackLight = new THREE.PointLight("#d7fbff", 4.2, 46, 1.75);
