@@ -21,9 +21,9 @@
       content="中国出身の敬涵博（ケイ）の自己紹介ページ。学習経験、資格、強み、趣味、今後の目標を紹介します。"
     />
     <title>敬涵博（ケイ） | 自己紹介</title>
-    <link rel="stylesheet" href="css/style.css?v=rain-scene-20260702-2" />
+    <link rel="stylesheet" href="css/style.css?v=rain-scene-20260706-2" />
     <script defer src="https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.min.js"></script>
-    <script defer src="js/rain-scene.js?v=rain-scene-20260702-4"></script>
+    <script defer src="js/rain-scene.js?v=rain-scene-20260706-2"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
     <script
       defer
@@ -37,6 +37,7 @@
       <div class="rain-atmosphere"></div>
       <div class="grid-layer"></div>
       <div class="scan-layer"></div>
+      <div class="lightning-flash" data-lightning-flash></div>
     </div>
     <div class="cyber-glitch" data-cyber-glitch aria-hidden="true">
       <span></span>
@@ -91,6 +92,40 @@
         <a href="https://souken-sys-intra.com/introduction/shinjin/2026/2026.php">2026年度</a>
         <a href="https://souken-sys-intra.com/AMS/shinjin.php">年度別一覧</a>
       </nav>
+      <button
+        class="sound-toggle"
+        type="button"
+        data-sound-toggle
+        aria-pressed="false"
+        aria-label="雨音・雷鳴・ネオンのノイズ音を再生"
+      >
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">
+          <path d="M4 9v6h4l5 5V4L8 9H4z" fill="currentColor" />
+          <path
+            class="sound-toggle-wave"
+            d="M16.3 8.5a5 5 0 0 1 0 7"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.6"
+            stroke-linecap="round"
+          />
+          <path
+            class="sound-toggle-wave"
+            d="M18.8 6a9 9 0 0 1 0 12"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.6"
+            stroke-linecap="round"
+          />
+          <path
+            class="sound-toggle-mute"
+            d="M16 8l5 8M21 8l-5 8"
+            stroke="currentColor"
+            stroke-width="1.6"
+            stroke-linecap="round"
+          />
+        </svg>
+      </button>
     </header>
 
     <main id="top">

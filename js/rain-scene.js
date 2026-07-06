@@ -58,6 +58,7 @@
   const cameraTargetLookTarget = lookTarget.clone();
   const pointerTarget = new THREE.Vector2(0, 0);
   const pointerCurrent = new THREE.Vector2(0, 0);
+  const lightningShakeOffset = new THREE.Vector3(0, 0, 0);
   const storyElement = document.querySelector(".story");
   const storyPanelOrder = ["profile", "hobby", "career"];
   const storyPanels = storyPanelOrder
@@ -573,27 +574,20 @@
   scene.add(ambient);
 
   const signLight = new THREE.PointLight("#44d6c4", 6.2, 42, 1.65);
-  signLight.position.set(3.7, 4.7, -19.4);
+  signLight.position.set(5.1, 4.7, -19.4);
   scene.add(signLight);
 
   const signRimLight = new THREE.PointLight("#e8fffb", 1.8, 18, 1.55);
-  signRimLight.position.set(3.7, 4.7, -19.4);
+  signRimLight.position.set(2.6, 6.15, -23.4);
   scene.add(signRimLight);
 
   const warmLight = new THREE.PointLight("#ff8a62", 2.7, 34, 1.55);
-  warmLight.position.set(3.7, 3.7, -20);
+  warmLight.position.set(12.2, 3.7, -16.2);
   scene.add(warmLight);
 
-  const coolBackLight = new THREE.PointLight("#d7fbff", 2.7, 46, 1.75);
-  coolBackLight.position.set(12, 2.6, -25);
+  const coolBackLight = new THREE.PointLight("#d7fbff", 4.2, 46, 1.75);
+  coolBackLight.position.set(14, 5.4, -18.2);
   scene.add(coolBackLight);
-
-  const coolBackLight2 = new THREE.PointLight("#d7fbff", 2.7, 46, 1.75);
-  coolBackLight2.position.set(13, 7.4, -25);
-  scene.add(coolBackLight2);
-
-  const helper = new THREE.PointLightHelper(coolBackLight2, 0.5);
-scene.add(helper);
 
   const warmBackLight = new THREE.PointLight("#ffe0c9", 2.1, 36, 1.82);
   warmBackLight.position.set(-10.8, 3.3, -18.6);
@@ -606,6 +600,106 @@ scene.add(helper);
   const lightning = new THREE.PointLight("#bdefff", 0, 52, 1.25);
   lightning.position.set(0, 9.5, -10);
   scene.add(lightning);
+
+  const flashOverlay = document.querySelector("[data-lightning-flash]");
+
+  const boltGroup = new THREE.Group();
+  boltGroup.position.set(1.8, 0, -22.5);
+  scene.add(boltGroup);
+
+  const boltPointCapacity = 40;
+  const createBoltStrand = (color, baseOpacity) => {
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute(
+      "position",
+      new THREE.BufferAttribute(new Float32Array(boltPointCapacity * 3), 3)
+    );
+    geometry.setDrawRange(0, 0);
+    const material = new THREE.LineBasicMaterial({
+      color,
+      transparent: true,
+      opacity: 0,
+      depthWrite: false,
+      depthTest: false,
+      blending: THREE.AdditiveBlending,
+      toneMapped: false,
+    });
+    const line = new THREE.Line(geometry, material);
+    line.frustumCulled = false;
+    line.userData.baseOpacity = baseOpacity;
+    boltGroup.add(line);
+    return line;
+  };
+
+  const boltGlowB = createBoltStrand("#6fd4f2", 0.32);
+  const boltGlowA = createBoltStrand("#9fe9ff", 0.55);
+  const boltCore = createBoltStrand("#f4feff", 0.95);
+  const boltBranch = createBoltStrand("#eafcff", 0.6);
+  const boltStrands = [boltCore, boltGlowA, boltGlowB, boltBranch];
+
+  const displaceBoltPath = (start, end, iterations, spread) => {
+    let points = [start.clone(), end.clone()];
+    let amount = spread;
+    for (let iteration = 0; iteration < iterations; iteration += 1) {
+      const next = [points[0]];
+      for (let i = 0; i < points.length - 1; i += 1) {
+        const a = points[i];
+        const b = points[i + 1];
+        const mid = a.clone().lerp(b, 0.5 + THREE.MathUtils.randFloatSpread(0.3));
+        mid.x += THREE.MathUtils.randFloatSpread(amount);
+        mid.z += THREE.MathUtils.randFloatSpread(amount * 0.6);
+        next.push(mid, b);
+      }
+      points = next;
+      amount *= 0.54;
+    }
+    return points;
+  };
+
+  const writeBoltStrand = (line, points, jitter) => {
+    const positions = line.geometry.attributes.position.array;
+    const count = Math.min(points.length, boltPointCapacity);
+    for (let i = 0; i < count; i += 1) {
+      const point = points[i];
+      positions[i * 3] = point.x + (jitter ? THREE.MathUtils.randFloatSpread(jitter) : 0);
+      positions[i * 3 + 1] = point.y;
+      positions[i * 3 + 2] = point.z + (jitter ? THREE.MathUtils.randFloatSpread(jitter * 0.6) : 0);
+    }
+    line.geometry.setDrawRange(0, count);
+    line.geometry.attributes.position.needsUpdate = true;
+    line.geometry.computeBoundingSphere();
+  };
+
+  const regenerateBolt = () => {
+    const top = new THREE.Vector3(
+      THREE.MathUtils.randFloatSpread(1.6),
+      11.2 + THREE.MathUtils.randFloatSpread(0.4),
+      THREE.MathUtils.randFloatSpread(1)
+    );
+    const bottom = new THREE.Vector3(
+      top.x + THREE.MathUtils.randFloatSpread(3.4),
+      THREE.MathUtils.randFloat(2.4, 4.4),
+      top.z + THREE.MathUtils.randFloatSpread(1.6)
+    );
+    const mainPath = displaceBoltPath(top, bottom, 5, 1.3);
+
+    writeBoltStrand(boltCore, mainPath, 0);
+    writeBoltStrand(boltGlowA, mainPath, 0.05);
+    writeBoltStrand(boltGlowB, mainPath, 0.1);
+
+    const branchStart = mainPath[Math.floor(mainPath.length * THREE.MathUtils.randFloat(0.3, 0.55))];
+    const branchEnd = branchStart
+      .clone()
+      .add(
+        new THREE.Vector3(
+          THREE.MathUtils.randFloat(0.9, 1.8) * (Math.random() < 0.5 ? -1 : 1),
+          THREE.MathUtils.randFloat(-2.4, -1.2),
+          THREE.MathUtils.randFloatSpread(1)
+        )
+      );
+    const branchPath = displaceBoltPath(branchStart, branchEnd, 3, 0.7);
+    writeBoltStrand(boltBranch, branchPath, 0);
+  };
 
   const rainMaterial = new THREE.ShaderMaterial({
     transparent: true,
@@ -772,11 +866,166 @@ scene.add(helper);
     { passive: true }
   );
 
+  const soundToggle = document.querySelector("[data-sound-toggle]");
+  let audioContext = null;
+  let masterGain = null;
+  let soundEnabled = false;
+  let rainLoopGain = null;
+  let buzzToneGain = null;
+  let buzzNoiseGain = null;
+
+  const createNoiseBuffer = (ctx, duration) => {
+    const length = Math.max(1, Math.floor(ctx.sampleRate * duration));
+    const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < length; i += 1) {
+      data[i] = Math.random() * 2 - 1;
+    }
+    return buffer;
+  };
+
+  const buildSceneAudio = () => {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) {
+      return false;
+    }
+    audioContext = new AudioContextClass();
+    masterGain = audioContext.createGain();
+    masterGain.gain.value = 0;
+    masterGain.connect(audioContext.destination);
+
+    const rainSource = audioContext.createBufferSource();
+    rainSource.buffer = createNoiseBuffer(audioContext, 4);
+    rainSource.loop = true;
+    const rainHighpass = audioContext.createBiquadFilter();
+    rainHighpass.type = "highpass";
+    rainHighpass.frequency.value = 900;
+    const rainLowpass = audioContext.createBiquadFilter();
+    rainLowpass.type = "lowpass";
+    rainLowpass.frequency.value = 5200;
+    rainLoopGain = audioContext.createGain();
+    rainLoopGain.gain.value = 0.5;
+    rainSource.connect(rainHighpass);
+    rainHighpass.connect(rainLowpass);
+    rainLowpass.connect(rainLoopGain);
+    rainLoopGain.connect(masterGain);
+    rainSource.start();
+
+    const gustLfo = audioContext.createOscillator();
+    gustLfo.frequency.value = 0.06;
+    const gustLfoGain = audioContext.createGain();
+    gustLfoGain.gain.value = 0.1;
+    gustLfo.connect(gustLfoGain);
+    gustLfoGain.connect(rainLoopGain.gain);
+    gustLfo.start();
+
+    const buzzTone = audioContext.createOscillator();
+    buzzTone.type = "sawtooth";
+    buzzTone.frequency.value = 94;
+    buzzToneGain = audioContext.createGain();
+    buzzToneGain.gain.value = 0.015;
+    buzzTone.connect(buzzToneGain);
+    buzzToneGain.connect(masterGain);
+    buzzTone.start();
+
+    const buzzNoiseSource = audioContext.createBufferSource();
+    buzzNoiseSource.buffer = createNoiseBuffer(audioContext, 2);
+    buzzNoiseSource.loop = true;
+    const buzzNoiseFilter = audioContext.createBiquadFilter();
+    buzzNoiseFilter.type = "bandpass";
+    buzzNoiseFilter.frequency.value = 2500;
+    buzzNoiseFilter.Q.value = 0.7;
+    buzzNoiseGain = audioContext.createGain();
+    buzzNoiseGain.gain.value = 0;
+    buzzNoiseSource.connect(buzzNoiseFilter);
+    buzzNoiseFilter.connect(buzzNoiseGain);
+    buzzNoiseGain.connect(masterGain);
+    buzzNoiseSource.start();
+
+    return true;
+  };
+
+  const updateSignBuzzAudio = (power) => {
+    if (!audioContext || !buzzToneGain || !buzzNoiseGain) {
+      return;
+    }
+    const instability = THREE.MathUtils.clamp(Math.abs(power - 1) * 0.45, 0, 1);
+    const now = audioContext.currentTime;
+    buzzToneGain.gain.setTargetAtTime(0.015 + instability * 0.05, now, 0.03);
+    buzzNoiseGain.gain.setTargetAtTime(instability * 0.18, now, 0.02);
+  };
+
+  const playThunderSound = (strong) => {
+    if (!audioContext || !masterGain) {
+      return;
+    }
+    const now = audioContext.currentTime;
+    const delay = strong
+      ? THREE.MathUtils.randFloat(0.05, 0.16)
+      : THREE.MathUtils.randFloat(0.25, 0.7);
+
+    const crackSource = audioContext.createBufferSource();
+    crackSource.buffer = createNoiseBuffer(audioContext, 0.3);
+    const crackFilter = audioContext.createBiquadFilter();
+    crackFilter.type = "bandpass";
+    crackFilter.frequency.value = 1400;
+    crackFilter.Q.value = 0.6;
+    const crackGain = audioContext.createGain();
+    crackGain.gain.value = 0;
+    crackSource.connect(crackFilter);
+    crackFilter.connect(crackGain);
+    crackGain.connect(masterGain);
+    const crackStart = now + delay;
+    crackGain.gain.setValueAtTime(0, crackStart);
+    crackGain.gain.linearRampToValueAtTime(strong ? 0.9 : 0.5, crackStart + 0.012);
+    crackGain.gain.exponentialRampToValueAtTime(0.001, crackStart + 0.26);
+    crackSource.start(crackStart);
+    crackSource.stop(crackStart + 0.32);
+
+    const rumbleSource = audioContext.createBufferSource();
+    rumbleSource.buffer = createNoiseBuffer(audioContext, 2.4);
+    const rumbleFilter = audioContext.createBiquadFilter();
+    rumbleFilter.type = "lowpass";
+    rumbleFilter.frequency.value = 170;
+    const rumbleGain = audioContext.createGain();
+    rumbleGain.gain.value = 0;
+    rumbleSource.connect(rumbleFilter);
+    rumbleFilter.connect(rumbleGain);
+    rumbleGain.connect(masterGain);
+    const rumbleStart = crackStart + 0.05;
+    const rumbleDuration = strong ? 2.6 : 1.8;
+    rumbleGain.gain.setValueAtTime(0, rumbleStart);
+    rumbleGain.gain.linearRampToValueAtTime(strong ? 0.55 : 0.32, rumbleStart + 0.2);
+    rumbleGain.gain.exponentialRampToValueAtTime(0.001, rumbleStart + rumbleDuration);
+    rumbleSource.start(rumbleStart);
+    rumbleSource.stop(rumbleStart + rumbleDuration + 0.1);
+  };
+
+  if (soundToggle) {
+    soundToggle.addEventListener("click", () => {
+      if (!audioContext) {
+        const ready = buildSceneAudio();
+        if (!ready) {
+          soundToggle.disabled = true;
+          soundToggle.setAttribute("aria-pressed", "false");
+          return;
+        }
+      }
+      if (audioContext.state === "suspended") {
+        audioContext.resume();
+      }
+      soundEnabled = !soundEnabled;
+      soundToggle.setAttribute("aria-pressed", String(soundEnabled));
+      const now = audioContext.currentTime;
+      masterGain.gain.cancelScheduledValues(now);
+      masterGain.gain.setTargetAtTime(soundEnabled ? 0.85 : 0, now, 0.3);
+    });
+  }
+
   let animationFrame = 0;
   let nextFlickerAt = 1.6;
   let flickerUntil = 0;
   let flickerPower = 1;
-  let nextLightningAt = 4.8;
   let nextGlitchAt = 3.4;
   let glitchUntil = 0;
 
@@ -789,6 +1038,7 @@ scene.add(helper);
 
     const power = elapsed < flickerUntil ? flickerPower : 1;
     const flash = Math.max(0, power - 1);
+    updateSignBuzzAudio(power);
     const signBoost = 1 + flash * 0.5;
     const glowBoost = 1 + flash * 0.74;
     signBodyMaterial.color.setRGB(0.82 * signBoost, 1 * signBoost, 0.98 * signBoost);
@@ -803,12 +1053,89 @@ scene.add(helper);
     signRimLight.intensity = 1.15 + power * 0.8 + flash * 2.8;
     signLight.distance = 42 + flash * 7;
     reflectionMaterial.uniforms.uLightPower.value = 1.05 + power * 0.68 + flash * 0.36;
+  };
 
+  let nextLightningAt = 5.5;
+  let activeLightningStrike = null;
+  const fogBaseColor = new THREE.Color("#061012");
+  const fogFlashColor = new THREE.Color("#bdeeff");
+  const baseToneExposure = renderer.toneMappingExposure;
+
+  const triggerLightningStrike = (elapsed) => {
+    const pulseCount = THREE.MathUtils.randInt(2, 4);
+    const pulses = [];
+    let cursor = 0;
+    for (let i = 0; i < pulseCount; i += 1) {
+      pulses.push({ offset: cursor, peak: i === 0 ? 1 : THREE.MathUtils.randFloat(0.32, 0.78) });
+      cursor += THREE.MathUtils.randFloat(0.04, 0.13);
+    }
+    const showBolt = Math.random() < 0.62;
+    if (showBolt) {
+      regenerateBolt();
+    }
+    const strong = Math.random() < 0.4;
+    playThunderSound(strong);
+    activeLightningStrike = {
+      start: elapsed,
+      pulses,
+      duration: cursor + 0.3,
+      showBolt,
+      strong,
+    };
+  };
+
+  const sampleLightningStrike = (elapsed) => {
+    if (!activeLightningStrike) {
+      return 0;
+    }
+    const t = elapsed - activeLightningStrike.start;
+    if (t > activeLightningStrike.duration) {
+      activeLightningStrike = null;
+      return 0;
+    }
+    let value = 0;
+    activeLightningStrike.pulses.forEach((pulse) => {
+      if (t >= pulse.offset) {
+        value = Math.max(value, pulse.peak * Math.exp(-(t - pulse.offset) * 17));
+      }
+    });
+    return THREE.MathUtils.clamp(value, 0, 1);
+  };
+
+  const updateLightning = (elapsed) => {
     if (elapsed > nextLightningAt) {
-      lightning.intensity = Math.random() < 0.28 ? THREE.MathUtils.randFloat(3.8, 6.4) : 0;
-      nextLightningAt = elapsed + THREE.MathUtils.randFloat(5.8, 10.5);
+      nextLightningAt = elapsed + THREE.MathUtils.randFloat(6, 12);
+      if (Math.random() < 0.45) {
+        triggerLightningStrike(elapsed);
+      }
+    }
+
+    const strength = sampleLightningStrike(elapsed);
+    lightning.intensity = strength * 11.5;
+
+    const boltActive = Boolean(activeLightningStrike && activeLightningStrike.showBolt);
+    const boltOpacity = boltActive ? strength : 0;
+    boltStrands.forEach((line) => {
+      line.material.opacity = boltOpacity * line.userData.baseOpacity;
+    });
+
+    if (flashOverlay) {
+      flashOverlay.style.opacity = (strength * 0.62).toFixed(3);
+    }
+
+    reflectionMaterial.uniforms.uLightPower.value += strength * 0.85;
+    renderer.toneMappingExposure = baseToneExposure + strength * 0.4;
+    scene.fog.color.copy(fogBaseColor).lerp(fogFlashColor, strength * 0.75);
+
+    if (activeLightningStrike && activeLightningStrike.strong) {
+      const shake = Math.max(0, 1 - (elapsed - activeLightningStrike.start) * 7) * strength;
+      lightningShakeOffset.set(
+        THREE.MathUtils.randFloatSpread(0.05) * shake,
+        THREE.MathUtils.randFloatSpread(0.032) * shake,
+        0
+      );
     } else {
-      lightning.intensity *= 0.86;
+      lightningShakeOffset.set(0, 0, 0);
     }
   };
 
@@ -998,6 +1325,7 @@ scene.add(helper);
       cameraCurrentLookTarget.y - pointerCurrent.y * 0.38,
       cameraCurrentLookTarget.z
     );
+    camera.position.add(lightningShakeOffset);
     camera.lookAt(dynamicLookTarget);
 
     rainMaterial.uniforms.uTime.value = elapsed;
@@ -1005,6 +1333,7 @@ scene.add(helper);
     signGroup.rotation.y = -0.09 + pointerCurrent.x * 0.045;
     signGroup.rotation.x = pointerCurrent.y * 0.012;
     updateLights(elapsed);
+    updateLightning(elapsed);
     updateGlitch(elapsed);
 
     renderBackgroundTarget();
