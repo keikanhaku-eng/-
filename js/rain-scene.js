@@ -58,6 +58,7 @@
   const cameraTargetLookTarget = lookTarget.clone();
   const pointerTarget = new THREE.Vector2(0, 0);
   const pointerCurrent = new THREE.Vector2(0, 0);
+  const lightningShakeOffset = new THREE.Vector3(0, 0, 0);
   const storyElement = document.querySelector(".story");
   const storyPanelOrder = ["profile", "hobby", "career"];
   const storyPanels = storyPanelOrder
@@ -600,6 +601,106 @@
   lightning.position.set(0, 9.5, -10);
   scene.add(lightning);
 
+  const flashOverlay = document.querySelector("[data-lightning-flash]");
+
+  const boltGroup = new THREE.Group();
+  boltGroup.position.set(1.8, 0, -22.5);
+  scene.add(boltGroup);
+
+  const boltPointCapacity = 40;
+  const createBoltStrand = (color, baseOpacity) => {
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute(
+      "position",
+      new THREE.BufferAttribute(new Float32Array(boltPointCapacity * 3), 3)
+    );
+    geometry.setDrawRange(0, 0);
+    const material = new THREE.LineBasicMaterial({
+      color,
+      transparent: true,
+      opacity: 0,
+      depthWrite: false,
+      depthTest: false,
+      blending: THREE.AdditiveBlending,
+      toneMapped: false,
+    });
+    const line = new THREE.Line(geometry, material);
+    line.frustumCulled = false;
+    line.userData.baseOpacity = baseOpacity;
+    boltGroup.add(line);
+    return line;
+  };
+
+  const boltGlowB = createBoltStrand("#6fd4f2", 0.32);
+  const boltGlowA = createBoltStrand("#9fe9ff", 0.55);
+  const boltCore = createBoltStrand("#f4feff", 0.95);
+  const boltBranch = createBoltStrand("#eafcff", 0.6);
+  const boltStrands = [boltCore, boltGlowA, boltGlowB, boltBranch];
+
+  const displaceBoltPath = (start, end, iterations, spread) => {
+    let points = [start.clone(), end.clone()];
+    let amount = spread;
+    for (let iteration = 0; iteration < iterations; iteration += 1) {
+      const next = [points[0]];
+      for (let i = 0; i < points.length - 1; i += 1) {
+        const a = points[i];
+        const b = points[i + 1];
+        const mid = a.clone().lerp(b, 0.5 + THREE.MathUtils.randFloatSpread(0.3));
+        mid.x += THREE.MathUtils.randFloatSpread(amount);
+        mid.z += THREE.MathUtils.randFloatSpread(amount * 0.6);
+        next.push(mid, b);
+      }
+      points = next;
+      amount *= 0.54;
+    }
+    return points;
+  };
+
+  const writeBoltStrand = (line, points, jitter) => {
+    const positions = line.geometry.attributes.position.array;
+    const count = Math.min(points.length, boltPointCapacity);
+    for (let i = 0; i < count; i += 1) {
+      const point = points[i];
+      positions[i * 3] = point.x + (jitter ? THREE.MathUtils.randFloatSpread(jitter) : 0);
+      positions[i * 3 + 1] = point.y;
+      positions[i * 3 + 2] = point.z + (jitter ? THREE.MathUtils.randFloatSpread(jitter * 0.6) : 0);
+    }
+    line.geometry.setDrawRange(0, count);
+    line.geometry.attributes.position.needsUpdate = true;
+    line.geometry.computeBoundingSphere();
+  };
+
+  const regenerateBolt = () => {
+    const top = new THREE.Vector3(
+      THREE.MathUtils.randFloatSpread(1.6),
+      11.2 + THREE.MathUtils.randFloatSpread(0.4),
+      THREE.MathUtils.randFloatSpread(1)
+    );
+    const bottom = new THREE.Vector3(
+      top.x + THREE.MathUtils.randFloatSpread(3.4),
+      THREE.MathUtils.randFloat(2.4, 4.4),
+      top.z + THREE.MathUtils.randFloatSpread(1.6)
+    );
+    const mainPath = displaceBoltPath(top, bottom, 5, 1.3);
+
+    writeBoltStrand(boltCore, mainPath, 0);
+    writeBoltStrand(boltGlowA, mainPath, 0.05);
+    writeBoltStrand(boltGlowB, mainPath, 0.1);
+
+    const branchStart = mainPath[Math.floor(mainPath.length * THREE.MathUtils.randFloat(0.3, 0.55))];
+    const branchEnd = branchStart
+      .clone()
+      .add(
+        new THREE.Vector3(
+          THREE.MathUtils.randFloat(0.9, 1.8) * (Math.random() < 0.5 ? -1 : 1),
+          THREE.MathUtils.randFloat(-2.4, -1.2),
+          THREE.MathUtils.randFloatSpread(1)
+        )
+      );
+    const branchPath = displaceBoltPath(branchStart, branchEnd, 3, 0.7);
+    writeBoltStrand(boltBranch, branchPath, 0);
+  };
+
   const rainMaterial = new THREE.ShaderMaterial({
     transparent: true,
     depthWrite: false,
@@ -769,7 +870,6 @@
   let nextFlickerAt = 1.6;
   let flickerUntil = 0;
   let flickerPower = 1;
-  let nextLightningAt = 4.8;
   let nextGlitchAt = 3.4;
   let glitchUntil = 0;
 
@@ -796,12 +896,87 @@
     signRimLight.intensity = 1.15 + power * 0.8 + flash * 2.8;
     signLight.distance = 42 + flash * 7;
     reflectionMaterial.uniforms.uLightPower.value = 1.05 + power * 0.68 + flash * 0.36;
+  };
 
+  let nextLightningAt = 5.5;
+  let activeLightningStrike = null;
+  const fogBaseColor = new THREE.Color("#061012");
+  const fogFlashColor = new THREE.Color("#bdeeff");
+  const baseToneExposure = renderer.toneMappingExposure;
+
+  const triggerLightningStrike = (elapsed) => {
+    const pulseCount = THREE.MathUtils.randInt(2, 4);
+    const pulses = [];
+    let cursor = 0;
+    for (let i = 0; i < pulseCount; i += 1) {
+      pulses.push({ offset: cursor, peak: i === 0 ? 1 : THREE.MathUtils.randFloat(0.32, 0.78) });
+      cursor += THREE.MathUtils.randFloat(0.04, 0.13);
+    }
+    const showBolt = Math.random() < 0.62;
+    if (showBolt) {
+      regenerateBolt();
+    }
+    activeLightningStrike = {
+      start: elapsed,
+      pulses,
+      duration: cursor + 0.3,
+      showBolt,
+      strong: Math.random() < 0.4,
+    };
+  };
+
+  const sampleLightningStrike = (elapsed) => {
+    if (!activeLightningStrike) {
+      return 0;
+    }
+    const t = elapsed - activeLightningStrike.start;
+    if (t > activeLightningStrike.duration) {
+      activeLightningStrike = null;
+      return 0;
+    }
+    let value = 0;
+    activeLightningStrike.pulses.forEach((pulse) => {
+      if (t >= pulse.offset) {
+        value = Math.max(value, pulse.peak * Math.exp(-(t - pulse.offset) * 17));
+      }
+    });
+    return THREE.MathUtils.clamp(value, 0, 1);
+  };
+
+  const updateLightning = (elapsed) => {
     if (elapsed > nextLightningAt) {
-      lightning.intensity = Math.random() < 0.28 ? THREE.MathUtils.randFloat(3.8, 6.4) : 0;
-      nextLightningAt = elapsed + THREE.MathUtils.randFloat(5.8, 10.5);
+      nextLightningAt = elapsed + THREE.MathUtils.randFloat(6, 12);
+      if (Math.random() < 0.45) {
+        triggerLightningStrike(elapsed);
+      }
+    }
+
+    const strength = sampleLightningStrike(elapsed);
+    lightning.intensity = strength * 11.5;
+
+    const boltActive = Boolean(activeLightningStrike && activeLightningStrike.showBolt);
+    const boltOpacity = boltActive ? strength : 0;
+    boltStrands.forEach((line) => {
+      line.material.opacity = boltOpacity * line.userData.baseOpacity;
+    });
+
+    if (flashOverlay) {
+      flashOverlay.style.opacity = (strength * 0.62).toFixed(3);
+    }
+
+    reflectionMaterial.uniforms.uLightPower.value += strength * 0.85;
+    renderer.toneMappingExposure = baseToneExposure + strength * 0.4;
+    scene.fog.color.copy(fogBaseColor).lerp(fogFlashColor, strength * 0.75);
+
+    if (activeLightningStrike && activeLightningStrike.strong) {
+      const shake = Math.max(0, 1 - (elapsed - activeLightningStrike.start) * 7) * strength;
+      lightningShakeOffset.set(
+        THREE.MathUtils.randFloatSpread(0.05) * shake,
+        THREE.MathUtils.randFloatSpread(0.032) * shake,
+        0
+      );
     } else {
-      lightning.intensity *= 0.86;
+      lightningShakeOffset.set(0, 0, 0);
     }
   };
 
@@ -991,6 +1166,7 @@
       cameraCurrentLookTarget.y - pointerCurrent.y * 0.38,
       cameraCurrentLookTarget.z
     );
+    camera.position.add(lightningShakeOffset);
     camera.lookAt(dynamicLookTarget);
 
     rainMaterial.uniforms.uTime.value = elapsed;
@@ -998,6 +1174,7 @@
     signGroup.rotation.y = -0.09 + pointerCurrent.x * 0.045;
     signGroup.rotation.x = pointerCurrent.y * 0.012;
     updateLights(elapsed);
+    updateLightning(elapsed);
     updateGlitch(elapsed);
 
     renderBackgroundTarget();

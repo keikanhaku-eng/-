@@ -222,6 +222,21 @@ p {
   );
 }
 
+.lightning-flash {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  opacity: 0;
+  background: radial-gradient(
+    ellipse 62% 58% at 64% 20%,
+    rgba(232, 250, 255, 0.95),
+    rgba(178, 232, 255, 0.5) 42%,
+    rgba(110, 190, 220, 0.16) 66%,
+    transparent 80%
+  );
+  mix-blend-mode: screen;
+}
+
 .cyber-glitch {
   position: fixed;
   inset: 0;
