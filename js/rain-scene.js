@@ -574,20 +574,27 @@
   scene.add(ambient);
 
   const signLight = new THREE.PointLight("#44d6c4", 6.2, 42, 1.65);
-  signLight.position.set(5.1, 4.7, -19.4);
+  signLight.position.set(3.7, 4.7, -19.4);
   scene.add(signLight);
 
   const signRimLight = new THREE.PointLight("#e8fffb", 1.8, 18, 1.55);
-  signRimLight.position.set(2.6, 6.15, -23.4);
+  signRimLight.position.set(3.7, 4.7, -19.4);
   scene.add(signRimLight);
 
   const warmLight = new THREE.PointLight("#ff8a62", 2.7, 34, 1.55);
-  warmLight.position.set(12.2, 3.7, -16.2);
+  warmLight.position.set(3.7, 3.7, -20);
   scene.add(warmLight);
 
-  const coolBackLight = new THREE.PointLight("#d7fbff", 4.2, 46, 1.75);
-  coolBackLight.position.set(14, 5.4, -18.2);
+  const coolBackLight = new THREE.PointLight("#d7fbff", 2.7, 46, 1.75);
+  coolBackLight.position.set(12, 2.6, -25);
   scene.add(coolBackLight);
+
+  const coolBackLight2 = new THREE.PointLight("#d7fbff", 2.7, 46, 1.75);
+  coolBackLight2.position.set(13, 7.4, -25);
+  scene.add(coolBackLight2);
+
+  const helper = new THREE.PointLightHelper(coolBackLight2, 0.5);
+scene.add(helper);
 
   const warmBackLight = new THREE.PointLight("#ffe0c9", 2.1, 36, 1.82);
   warmBackLight.position.set(-10.8, 3.3, -18.6);
