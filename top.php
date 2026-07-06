@@ -29,7 +29,7 @@
       defer
       src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/ScrollTrigger.min.js"
     ></script>
-    <script defer src="js/script.js"></script>
+    <script defer src="js/script.js?v=scene-restore-20260706-1"></script>
   </head>
   <body>
     <div class="background-system" aria-hidden="true">
@@ -38,9 +38,51 @@
       <div class="grid-layer"></div>
       <div class="scan-layer"></div>
     </div>
+    <div class="cyber-glitch" data-cyber-glitch aria-hidden="true">
+      <span></span>
+      <span></span>
+      <span></span>
+      <span></span>
+      <span></span>
+    </div>
+    <div class="intro-sequence" data-intro>
+      <div class="intro-grid" aria-hidden="true">
+        <span></span>
+        <span></span>
+        <span></span>
+        <span></span>
+      </div>
+      <div class="intro-scan" data-intro-scan aria-hidden="true"></div>
+      <button class="intro-skip" type="button" data-intro-skip aria-label="オープニングをスキップ">
+        SKIP
+      </button>
+      <div class="intro-core" data-intro-core>
+        <div class="intro-frame" data-intro-frame aria-hidden="true">
+          <span></span>
+          <span></span>
+          <span></span>
+          <span></span>
+        </div>
+        <div class="intro-title" data-intro-title>
+          <span class="intro-kicker">PROFILE INITIALIZED</span>
+          <strong data-intro-name>敬涵博</strong>
+          <span class="intro-sub" data-intro-sub>KEI / ENGINEER IN TRAINING</span>
+        </div>
+        <div class="intro-plates" aria-hidden="true">
+          <span class="intro-plate intro-plate-back" data-intro-plate="back">Learning</span>
+          <span class="intro-plate intro-plate-middle" data-intro-plate="middle">Culture</span>
+          <span class="intro-plate intro-plate-front" data-intro-plate="front">敬</span>
+        </div>
+        <div class="intro-status" aria-hidden="true">
+          <span data-intro-status></span>
+          <span data-intro-status></span>
+          <span data-intro-status></span>
+        </div>
+      </div>
+    </div>
 
     <header class="site-header" data-animate="header">
-      <button class="brand" type="button" data-scene-focus-toggle ...>Kei</button>
+      <button class="brand" type="button" data-scene-focus-toggle aria-label="3Dシーン表示を切り替え" aria-pressed="false">Kei</button>
       <nav class="site-nav" aria-label="ページ内ナビゲーション">
         <a href="#top">TOP</a>
         <a href="#profile">プロフィール</a>
