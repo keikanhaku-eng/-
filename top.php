@@ -40,7 +40,7 @@
     </div>
 
     <header class="site-header" data-animate="header">
-      <a class="brand" href="#top" aria-label="ページ上部へ">Kei</a>
+      <button class="brand" type="button" data-scene-focus-toggle ...>Kei</button>
       <nav class="site-nav" aria-label="ページ内ナビゲーション">
         <a href="#top">TOP</a>
         <a href="#profile">プロフィール</a>
