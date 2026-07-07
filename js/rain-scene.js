@@ -984,8 +984,13 @@ fetch("audio/rain.mp3")
   thunderSource.start(now + delay);
 };
 
+ const ready = buildSceneAudio();
+
   if (soundToggle) {
+
+
     soundToggle.addEventListener("click", () => {
+
       if (!audioContext) {
         const ready = buildSceneAudio();
         if (!ready) {
@@ -1004,6 +1009,7 @@ fetch("audio/rain.mp3")
       masterGain.gain.setTargetAtTime(soundEnabled ? 0.85 : 0, now, 0.3);
     });
   }
+   audioContext.resume();
 
   let animationFrame = 0;
   let nextFlickerAt = 1.6;
