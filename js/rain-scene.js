@@ -198,23 +198,278 @@
   enableAoMap(ground);
   scene.add(ground);
 
-  const waterFilmMaterial = new THREE.MeshStandardMaterial({
-    color: "#0b2424",
-    normalMap: rainGroundNormal,
-    normalScale: new THREE.Vector2(0.22, 0.22),
-    roughnessMap: rainGroundRoughness,
-    roughness: 0.035,
-    metalness: 0.18,
-    transparent: true,
-    opacity: 0.18,
-    depthWrite: false,
-    blending: THREE.AdditiveBlending,
+  // 水洼 + 涟漪: 平面反射 (Reflector 方式) を自前実装し、
+  // mipmap ブラー / 波紋ノーマル / 水たまりマスクを合成する
+  const rippleRadius = isCompact ? 1 : 2;
+  const reflectorTarget = new THREE.WebGLRenderTarget(2, 2, {
+    depthBuffer: true,
+    stencilBuffer: false,
+    generateMipmaps: true,
+    minFilter: THREE.LinearMipmapLinearFilter,
+    magFilter: THREE.LinearFilter,
   });
 
-  const waterFilm = new THREE.Mesh(new THREE.PlaneGeometry(44, 78, 1, 1), waterFilmMaterial);
-  waterFilm.rotation.x = -Math.PI / 2;
-  waterFilm.position.set(0, -2.055, -18);
-  scene.add(waterFilm);
+  const puddleMaterial = new THREE.ShaderMaterial({
+    transparent: true,
+    depthWrite: false,
+    extensions: { shaderTextureLOD: true },
+    uniforms: {
+      uTime: { value: 0 },
+      uLightPower: { value: 1 },
+      uExposure: { value: renderer.toneMappingExposure },
+      uRainStrength: { value: 1.9 },
+      uRippleScale: { value: 5.6 },
+      uDistortion: { value: 0.05 },
+      uMipLevels: { value: 1 },
+      uTextureMatrix: { value: new THREE.Matrix4() },
+      tReflect: { value: reflectorTarget.texture },
+      uDropletNormal: { value: rainGroundNormal },
+      uRoughnessMap: { value: rainGroundRoughness },
+    },
+    vertexShader: `
+      uniform mat4 uTextureMatrix;
+
+      varying vec4 vReflectUv;
+      varying vec3 vWorldPos;
+
+      void main() {
+        vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+        vWorldPos = worldPosition.xyz;
+        vReflectUv = uTextureMatrix * vec4(position, 1.0);
+        gl_Position = projectionMatrix * viewMatrix * worldPosition;
+      }
+    `,
+    fragmentShader: `
+      #define MAX_RADIUS ${rippleRadius}
+
+      uniform sampler2D tReflect;
+      uniform sampler2D uDropletNormal;
+      uniform sampler2D uRoughnessMap;
+      uniform float uTime;
+      uniform float uLightPower;
+      uniform float uExposure;
+      uniform float uRainStrength;
+      uniform float uRippleScale;
+      uniform float uDistortion;
+      uniform float uMipLevels;
+
+      varying vec4 vReflectUv;
+      varying vec3 vWorldPos;
+
+      // https://www.shadertoy.com/view/4djSRW
+      float hash12(vec2 p) {
+        vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+        p3 += dot(p3, p3.yzx + 19.19);
+        return fract((p3.x + p3.y) * p3.z);
+      }
+
+      vec2 hash22(vec2 p) {
+        vec3 p3 = fract(vec3(p.xyx) * vec3(0.1031, 0.1030, 0.0973));
+        p3 += dot(p3, p3.yzx + 19.19);
+        return fract((p3.xx + p3.yz) * p3.zy);
+      }
+
+      float valueNoise(vec2 p) {
+        vec2 i = floor(p);
+        vec2 f = fract(p);
+        vec2 u = f * f * (3.0 - 2.0 * f);
+        float a = hash12(i);
+        float b = hash12(i + vec2(1.0, 0.0));
+        float c = hash12(i + vec2(0.0, 1.0));
+        float d = hash12(i + vec2(1.0, 1.0));
+        return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+      }
+
+      float fbm(vec2 p) {
+        float value = 0.0;
+        float amplitude = 0.5;
+        for (int i = 0; i < 4; i += 1) {
+          value += valueNoise(p) * amplitude;
+          p = p * 2.03 + vec2(11.7, 5.3);
+          amplitude *= 0.5;
+        }
+        return value;
+      }
+
+      // 雨滴の波紋: セルごとに 1 滴、リング状の勾配を返す
+      vec2 rippleGradient(vec2 rippleUv) {
+        vec2 p0 = floor(rippleUv);
+        vec2 circles = vec2(0.0);
+        for (int j = -MAX_RADIUS; j <= MAX_RADIUS; j += 1) {
+          for (int i = -MAX_RADIUS; i <= MAX_RADIUS; i += 1) {
+            vec2 pi = p0 + vec2(float(i), float(j));
+            vec2 hsh = hash22(pi);
+            vec2 center = pi + hash22(hsh);
+            float t = fract(0.8 * uTime + hash12(hsh));
+            vec2 v = center - rippleUv;
+            float d = length(v) - (float(MAX_RADIUS) + 1.0) * t + (uRainStrength * 0.1 * t);
+            float h = 1e-3;
+            float d1 = d - h;
+            float d2 = d + h;
+            float p1 = sin(31.0 * d1) * smoothstep(-0.6, -0.3, d1) * smoothstep(0.0, -0.3, d1);
+            float p2 = sin(31.0 * d2) * smoothstep(-0.6, -0.3, d2) * smoothstep(0.0, -0.3, d2);
+            circles += 0.5 * (v / max(length(v), 1e-4)) * ((p2 - p1) / (2.0 * h) * (1.0 - t) * (1.0 - t));
+          }
+        }
+        circles /= float((MAX_RADIUS * 2 + 1) * (MAX_RADIUS * 2 + 1));
+        return circles;
+      }
+
+      vec3 acesToneMap(vec3 color) {
+        color *= uExposure;
+        return clamp(
+          (color * (2.51 * color + 0.03)) / (color * (2.43 * color + 0.59) + 0.14),
+          0.0,
+          1.0
+        );
+      }
+
+      void main() {
+        vec2 worldUv = vWorldPos.xz;
+
+        float basin = fbm(worldUv * 0.14 + vec2(3.7, 1.3));
+        float rough = texture2D(uRoughnessMap, worldUv * 0.05).r;
+        float puddle = smoothstep(0.44, 0.61, basin + (0.5 - rough) * 0.12);
+        float film = 0.16 + puddle * 0.84;
+
+        float camDist = distance(vWorldPos, cameraPosition);
+        float rippleFade = 1.0 - smoothstep(12.0, 36.0, camDist);
+
+        vec2 grad = vec2(0.0);
+        if (rippleFade > 0.003) {
+          grad = rippleGradient(worldUv * uRippleScale) * rippleFade;
+        }
+
+        vec3 detail = texture2D(uDropletNormal, worldUv * 0.22 + vec2(0.0, uTime * 0.006)).rgb * 2.0 - 1.0;
+
+        vec2 reflectUv = vReflectUv.xy / max(vReflectUv.w, 1e-4);
+        vec2 distortion = grad * uDistortion * puddle + detail.xy * 0.011 * film;
+        float blur = mix(uMipLevels * 0.62, 1.2, puddle) + rough * 0.8;
+        blur = clamp(blur, 0.0, max(uMipLevels - 1.0, 0.0));
+        vec3 reflectedColor = texture2DLodEXT(
+          tReflect,
+          clamp(reflectUv + distortion, vec2(0.001), vec2(0.999)),
+          blur
+        ).rgb;
+
+        vec3 viewDir = normalize(cameraPosition - vWorldPos);
+        float fresnel = pow(1.0 - clamp(viewDir.y, 0.0, 1.0), 1.7);
+        float strength = mix(0.30, 1.0, fresnel);
+
+        float glint = clamp(length(grad) * 0.62, 0.0, 1.0);
+
+        vec3 color = reflectedColor * uLightPower * strength;
+        color += glint * vec3(0.36, 0.66, 0.63) * (0.05 + puddle * 0.16);
+        color = acesToneMap(color);
+        color = pow(color, vec3(1.0 / 2.2));
+
+        float luma = dot(color, vec3(0.299, 0.587, 0.114));
+        float alpha = film * (0.34 + fresnel * 0.42) + luma * 0.34 * puddle;
+        alpha = clamp(alpha, 0.0, 0.94);
+
+        gl_FragColor = vec4(color, alpha);
+      }
+    `,
+  });
+
+  const puddle = new THREE.Mesh(new THREE.PlaneGeometry(44, 78, 1, 1), puddleMaterial);
+  puddle.rotation.x = -Math.PI / 2;
+  puddle.position.set(0, -2.05, -18);
+  scene.add(puddle);
+
+  const reflectorPlane = new THREE.Plane();
+  const reflectorNormal = new THREE.Vector3();
+  const reflectorWorldPosition = new THREE.Vector3();
+  const cameraWorldPosition = new THREE.Vector3();
+  const reflectorRotationMatrix = new THREE.Matrix4();
+  const reflectorLookAt = new THREE.Vector3();
+  const reflectorView = new THREE.Vector3();
+  const reflectorTargetPoint = new THREE.Vector3();
+  const reflectorClipPlane = new THREE.Vector4();
+  const reflectorQ = new THREE.Vector4();
+  const reflectorVirtualCamera = new THREE.PerspectiveCamera();
+
+  const updateReflector = () => {
+    // render() より前に呼ばれるため matrixWorld を明示的に更新する
+    puddle.updateMatrixWorld();
+    camera.updateMatrixWorld();
+    reflectorWorldPosition.setFromMatrixPosition(puddle.matrixWorld);
+    cameraWorldPosition.setFromMatrixPosition(camera.matrixWorld);
+    reflectorRotationMatrix.extractRotation(puddle.matrixWorld);
+
+    reflectorNormal.set(0, 0, 1);
+    reflectorNormal.applyMatrix4(reflectorRotationMatrix);
+
+    reflectorView.subVectors(reflectorWorldPosition, cameraWorldPosition);
+    if (reflectorView.dot(reflectorNormal) > 0) {
+      return;
+    }
+    reflectorView.reflect(reflectorNormal).negate();
+    reflectorView.add(reflectorWorldPosition);
+
+    reflectorRotationMatrix.extractRotation(camera.matrixWorld);
+    reflectorLookAt.set(0, 0, -1);
+    reflectorLookAt.applyMatrix4(reflectorRotationMatrix);
+    reflectorLookAt.add(cameraWorldPosition);
+
+    reflectorTargetPoint.subVectors(reflectorWorldPosition, reflectorLookAt);
+    reflectorTargetPoint.reflect(reflectorNormal).negate();
+    reflectorTargetPoint.add(reflectorWorldPosition);
+
+    reflectorVirtualCamera.position.copy(reflectorView);
+    reflectorVirtualCamera.up.set(0, 1, 0);
+    reflectorVirtualCamera.up.applyMatrix4(reflectorRotationMatrix);
+    reflectorVirtualCamera.up.reflect(reflectorNormal);
+    reflectorVirtualCamera.lookAt(reflectorTargetPoint);
+    reflectorVirtualCamera.far = camera.far;
+    reflectorVirtualCamera.updateMatrixWorld();
+    reflectorVirtualCamera.projectionMatrix.copy(camera.projectionMatrix);
+
+    // テクスチャ行列はオブリーク補正前の射影行列で作る
+    const textureMatrix = puddleMaterial.uniforms.uTextureMatrix.value;
+    textureMatrix.set(
+      0.5, 0.0, 0.0, 0.5,
+      0.0, 0.5, 0.0, 0.5,
+      0.0, 0.0, 0.5, 0.5,
+      0.0, 0.0, 0.0, 1.0
+    );
+    textureMatrix.multiply(reflectorVirtualCamera.projectionMatrix);
+    textureMatrix.multiply(reflectorVirtualCamera.matrixWorldInverse);
+    textureMatrix.multiply(puddle.matrixWorld);
+
+    // 鏡面より下をクリップする oblique near-plane
+    reflectorPlane.setFromNormalAndCoplanarPoint(reflectorNormal, reflectorWorldPosition);
+    reflectorPlane.applyMatrix4(reflectorVirtualCamera.matrixWorldInverse);
+    reflectorClipPlane.set(
+      reflectorPlane.normal.x,
+      reflectorPlane.normal.y,
+      reflectorPlane.normal.z,
+      reflectorPlane.constant
+    );
+
+    const projectionMatrix = reflectorVirtualCamera.projectionMatrix;
+    reflectorQ.x =
+      (Math.sign(reflectorClipPlane.x) + projectionMatrix.elements[8]) / projectionMatrix.elements[0];
+    reflectorQ.y =
+      (Math.sign(reflectorClipPlane.y) + projectionMatrix.elements[9]) / projectionMatrix.elements[5];
+    reflectorQ.z = -1;
+    reflectorQ.w = (1 + projectionMatrix.elements[10]) / projectionMatrix.elements[14];
+    reflectorClipPlane.multiplyScalar(2 / reflectorClipPlane.dot(reflectorQ));
+    projectionMatrix.elements[2] = reflectorClipPlane.x;
+    projectionMatrix.elements[6] = reflectorClipPlane.y;
+    projectionMatrix.elements[10] = reflectorClipPlane.z + 1 - 0.003;
+    projectionMatrix.elements[14] = reflectorClipPlane.w;
+
+    puddle.visible = false;
+    rainGroup.visible = false;
+    const previousTarget = renderer.getRenderTarget();
+    renderer.setRenderTarget(reflectorTarget);
+    renderer.state.buffers.depth.setMask(true);
+    renderer.render(scene, reflectorVirtualCamera);
+    renderer.setRenderTarget(previousTarget);
+    puddle.visible = true;
+    rainGroup.visible = true;
+  };
 
   const wallMaterial = new THREE.MeshStandardMaterial({
     color: "#5d635b",
@@ -507,47 +762,6 @@
   const leftLamp = makeLightBox("#ffe0c9", 1.4, 0.5, 0.16, 1.7);
   leftLamp.position.set(-9.4, 3.6, -25.42);
   scene.add(leftLamp);
-
-  const reflectionMaterial = new THREE.ShaderMaterial({
-    transparent: true,
-    depthWrite: false,
-    blending: THREE.AdditiveBlending,
-    uniforms: {
-      uLightPower: { value: 1 },
-    },
-    vertexShader: `
-      varying vec2 vUv;
-
-      void main() {
-        vUv = uv;
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-      }
-    `,
-    fragmentShader: `
-      precision mediump float;
-
-      uniform float uLightPower;
-      varying vec2 vUv;
-
-      void main() {
-        vec2 uv = vUv;
-        float perspective = smoothstep(0.02, 0.86, uv.y) * (1.0 - smoothstep(0.93, 1.0, uv.y));
-        float center = 1.0 - smoothstep(0.18, 0.68, abs(uv.x - 0.5));
-        float edgeMask = smoothstep(0.0, 0.2, uv.x) * smoothstep(0.0, 0.2, 1.0 - uv.x);
-        float asphaltSheen = 0.18 + sin(uv.y * 18.0 + sin(uv.x * 10.0) * 0.6) * 0.035;
-        float wet = center * perspective * edgeMask * asphaltSheen;
-        vec3 teal = vec3(0.18, 0.78, 0.78);
-        vec3 warm = vec3(0.95, 0.36, 0.24);
-        vec3 color = mix(teal, warm, smoothstep(0.34, 0.72, uv.x)) * wet * uLightPower;
-        gl_FragColor = vec4(color, wet * 0.48);
-      }
-    `,
-  });
-
-  const reflection = new THREE.Mesh(new THREE.PlaneGeometry(22, 36, 1, 1), reflectionMaterial);
-  reflection.rotation.x = -Math.PI / 2;
-  reflection.position.set(5.6, -2.062, -10.8);
-  scene.add(reflection);
 
   const makeWetStreaks = () => {
     const positions = [];
@@ -844,6 +1058,12 @@
     renderer.setSize(width, height, false);
     const targetRatio = 0.32;
     bgTarget.setSize(Math.max(2, Math.floor(width * targetRatio)), Math.max(2, Math.floor(height * targetRatio)));
+    const reflectRatio = isCompact ? 0.35 : 0.5;
+    const reflectWidth = Math.max(2, Math.floor(width * reflectRatio));
+    const reflectHeight = Math.max(2, Math.floor(height * reflectRatio));
+    reflectorTarget.setSize(reflectWidth, reflectHeight);
+    puddleMaterial.uniforms.uMipLevels.value =
+      Math.floor(Math.log2(Math.max(reflectWidth, reflectHeight))) + 1;
     if (glitchCanvas) {
       glitchCanvas.width = Math.max(160, Math.floor(width * 0.48));
       glitchCanvas.height = Math.max(90, Math.floor(height * 0.48));
@@ -984,8 +1204,6 @@ fetch("audio/rain.mp3")
   thunderSource.start(now + delay);
 };
 
- const ready = buildSceneAudio();
-
   if (soundToggle) {
 
 
@@ -1009,7 +1227,7 @@ fetch("audio/rain.mp3")
       masterGain.gain.setTargetAtTime(soundEnabled ? 0.85 : 0, now, 0.3);
     });
   }
-   audioContext.resume();
+  
 
   let animationFrame = 0;
   let nextFlickerAt = 1.6;
@@ -1041,7 +1259,7 @@ fetch("audio/rain.mp3")
     signLight.intensity = 1.65 + power * 3.45 + flash * 9.8;
     signRimLight.intensity = 1.15 + power * 0.8 + flash * 2.8;
     signLight.distance = 42 + flash * 7;
-    reflectionMaterial.uniforms.uLightPower.value = 1.05 + power * 0.68 + flash * 0.36;
+    puddleMaterial.uniforms.uLightPower.value = 0.94 + power * 0.08 + flash * 0.1;
   };
 
   let nextLightningAt = 5.5;
@@ -1112,7 +1330,7 @@ fetch("audio/rain.mp3")
       flashOverlay.style.opacity = (strength * 0.62).toFixed(3);
     }
 
-    reflectionMaterial.uniforms.uLightPower.value += strength * 0.85;
+    puddleMaterial.uniforms.uLightPower.value += strength * 0.3;
     renderer.toneMappingExposure = baseToneExposure + strength * 0.4;
     scene.fog.color.copy(fogBaseColor).lerp(fogFlashColor, strength * 0.75);
 
@@ -1325,6 +1543,9 @@ fetch("audio/rain.mp3")
     updateLightning(elapsed);
     updateGlitch(elapsed);
 
+    puddleMaterial.uniforms.uTime.value = elapsed;
+    puddleMaterial.uniforms.uExposure.value = renderer.toneMappingExposure;
+    updateReflector();
     renderBackgroundTarget();
     renderer.render(scene, camera);
 
