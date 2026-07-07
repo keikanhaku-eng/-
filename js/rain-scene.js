@@ -901,6 +901,15 @@
     masterGain = audioContext.createGain();
     masterGain.gain.value = 0;
     masterGain.connect(audioContext.destination);
+    fetch("audio/Thunder.mp3")
+  .then((response) => response.arrayBuffer())
+  .then((data) => audioContext.decodeAudioData(data))
+  .then((buffer) => {
+    thunderBuffer = buffer;
+  })
+  .catch(() => {
+    thunderBuffer = null;
+  });
 
    const rainSource = audioContext.createBufferSource();
 rainSource.loop = true;
@@ -962,50 +971,18 @@ fetch("audio/rain.mp3")
   };
 
   const playThunderSound = (strong) => {
-    if (!audioContext || !masterGain) {
-      return;
-    }
-    const now = audioContext.currentTime;
-    const delay = strong
-      ? THREE.MathUtils.randFloat(0.05, 0.16)
-      : THREE.MathUtils.randFloat(0.25, 0.7);
-
-    const crackSource = audioContext.createBufferSource();
-    crackSource.buffer = createNoiseBuffer(audioContext, 0.3);
-    const crackFilter = audioContext.createBiquadFilter();
-    crackFilter.type = "bandpass";
-    crackFilter.frequency.value = 1400;
-    crackFilter.Q.value = 0.6;
-    const crackGain = audioContext.createGain();
-    crackGain.gain.value = 0;
-    crackSource.connect(crackFilter);
-    crackFilter.connect(crackGain);
-    crackGain.connect(masterGain);
-    const crackStart = now + delay;
-    crackGain.gain.setValueAtTime(0, crackStart);
-    crackGain.gain.linearRampToValueAtTime(strong ? 0.9 : 0.5, crackStart + 0.012);
-    crackGain.gain.exponentialRampToValueAtTime(0.001, crackStart + 0.26);
-    crackSource.start(crackStart);
-    crackSource.stop(crackStart + 0.32);
-
-    const rumbleSource = audioContext.createBufferSource();
-    rumbleSource.buffer = createNoiseBuffer(audioContext, 2.4);
-    const rumbleFilter = audioContext.createBiquadFilter();
-    rumbleFilter.type = "lowpass";
-    rumbleFilter.frequency.value = 170;
-    const rumbleGain = audioContext.createGain();
-    rumbleGain.gain.value = 0;
-    rumbleSource.connect(rumbleFilter);
-    rumbleFilter.connect(rumbleGain);
-    rumbleGain.connect(masterGain);
-    const rumbleStart = crackStart + 0.05;
-    const rumbleDuration = strong ? 2.6 : 1.8;
-    rumbleGain.gain.setValueAtTime(0, rumbleStart);
-    rumbleGain.gain.linearRampToValueAtTime(strong ? 0.55 : 0.32, rumbleStart + 0.2);
-    rumbleGain.gain.exponentialRampToValueAtTime(0.001, rumbleStart + rumbleDuration);
-    rumbleSource.start(rumbleStart);
-    rumbleSource.stop(rumbleStart + rumbleDuration + 0.1);
-  };
+  if (!audioContext || !masterGain || !thunderBuffer) return;
+  const now = audioContext.currentTime;
+  const delay = strong ? THREE.MathUtils.randFloat(0.05, 0.16) : THREE.MathUtils.randFloat(0.25, 0.7);
+  const thunderSource = audioContext.createBufferSource();
+  thunderSource.buffer = thunderBuffer;
+  thunderSource.playbackRate.value = THREE.MathUtils.randFloat(0.94, 1.06);
+  const thunderGain = audioContext.createGain();
+  thunderGain.gain.value = strong ? 0.9 : 0.55;
+  thunderSource.connect(thunderGain);
+  thunderGain.connect(masterGain);
+  thunderSource.start(now + delay);
+};
 
   if (soundToggle) {
     soundToggle.addEventListener("click", () => {
