@@ -58,6 +58,7 @@
   const cameraTargetLookTarget = lookTarget.clone();
   const pointerTarget = new THREE.Vector2(0, 0);
   const pointerCurrent = new THREE.Vector2(0, 0);
+  const lightningShakeOffset = new THREE.Vector3(0, 0, 0);
   const storyElement = document.querySelector(".story");
   const storyPanelOrder = ["profile", "hobby", "career"];
   const storyPanels = storyPanelOrder
@@ -197,23 +198,278 @@
   enableAoMap(ground);
   scene.add(ground);
 
-  const waterFilmMaterial = new THREE.MeshStandardMaterial({
-    color: "#0b2424",
-    normalMap: rainGroundNormal,
-    normalScale: new THREE.Vector2(0.22, 0.22),
-    roughnessMap: rainGroundRoughness,
-    roughness: 0.035,
-    metalness: 0.18,
-    transparent: true,
-    opacity: 0.18,
-    depthWrite: false,
-    blending: THREE.AdditiveBlending,
+  // 水洼 + 涟漪: 平面反射 (Reflector 方式) を自前実装し、
+  // mipmap ブラー / 波紋ノーマル / 水たまりマスクを合成する
+  const rippleRadius = isCompact ? 1 : 2;
+  const reflectorTarget = new THREE.WebGLRenderTarget(2, 2, {
+    depthBuffer: true,
+    stencilBuffer: false,
+    generateMipmaps: true,
+    minFilter: THREE.LinearMipmapLinearFilter,
+    magFilter: THREE.LinearFilter,
   });
 
-  const waterFilm = new THREE.Mesh(new THREE.PlaneGeometry(44, 78, 1, 1), waterFilmMaterial);
-  waterFilm.rotation.x = -Math.PI / 2;
-  waterFilm.position.set(0, -2.055, -18);
-  scene.add(waterFilm);
+  const puddleMaterial = new THREE.ShaderMaterial({
+    transparent: true,
+    depthWrite: false,
+    extensions: { shaderTextureLOD: true },
+    uniforms: {
+      uTime: { value: 0 },
+      uLightPower: { value: 1 },
+      uExposure: { value: renderer.toneMappingExposure },
+      uRainStrength: { value: 1.9 },
+      uRippleScale: { value: 5.6 },
+      uDistortion: { value: 0.05 },
+      uMipLevels: { value: 1 },
+      uTextureMatrix: { value: new THREE.Matrix4() },
+      tReflect: { value: reflectorTarget.texture },
+      uDropletNormal: { value: rainGroundNormal },
+      uRoughnessMap: { value: rainGroundRoughness },
+    },
+    vertexShader: `
+      uniform mat4 uTextureMatrix;
+
+      varying vec4 vReflectUv;
+      varying vec3 vWorldPos;
+
+      void main() {
+        vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+        vWorldPos = worldPosition.xyz;
+        vReflectUv = uTextureMatrix * vec4(position, 1.0);
+        gl_Position = projectionMatrix * viewMatrix * worldPosition;
+      }
+    `,
+    fragmentShader: `
+      #define MAX_RADIUS ${rippleRadius}
+
+      uniform sampler2D tReflect;
+      uniform sampler2D uDropletNormal;
+      uniform sampler2D uRoughnessMap;
+      uniform float uTime;
+      uniform float uLightPower;
+      uniform float uExposure;
+      uniform float uRainStrength;
+      uniform float uRippleScale;
+      uniform float uDistortion;
+      uniform float uMipLevels;
+
+      varying vec4 vReflectUv;
+      varying vec3 vWorldPos;
+
+      // https://www.shadertoy.com/view/4djSRW
+      float hash12(vec2 p) {
+        vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+        p3 += dot(p3, p3.yzx + 19.19);
+        return fract((p3.x + p3.y) * p3.z);
+      }
+
+      vec2 hash22(vec2 p) {
+        vec3 p3 = fract(vec3(p.xyx) * vec3(0.1031, 0.1030, 0.0973));
+        p3 += dot(p3, p3.yzx + 19.19);
+        return fract((p3.xx + p3.yz) * p3.zy);
+      }
+
+      float valueNoise(vec2 p) {
+        vec2 i = floor(p);
+        vec2 f = fract(p);
+        vec2 u = f * f * (3.0 - 2.0 * f);
+        float a = hash12(i);
+        float b = hash12(i + vec2(1.0, 0.0));
+        float c = hash12(i + vec2(0.0, 1.0));
+        float d = hash12(i + vec2(1.0, 1.0));
+        return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+      }
+
+      float fbm(vec2 p) {
+        float value = 0.0;
+        float amplitude = 0.5;
+        for (int i = 0; i < 4; i += 1) {
+          value += valueNoise(p) * amplitude;
+          p = p * 2.03 + vec2(11.7, 5.3);
+          amplitude *= 0.5;
+        }
+        return value;
+      }
+
+      // 雨滴の波紋: セルごとに 1 滴、リング状の勾配を返す
+      vec2 rippleGradient(vec2 rippleUv) {
+        vec2 p0 = floor(rippleUv);
+        vec2 circles = vec2(0.0);
+        for (int j = -MAX_RADIUS; j <= MAX_RADIUS; j += 1) {
+          for (int i = -MAX_RADIUS; i <= MAX_RADIUS; i += 1) {
+            vec2 pi = p0 + vec2(float(i), float(j));
+            vec2 hsh = hash22(pi);
+            vec2 center = pi + hash22(hsh);
+            float t = fract(0.8 * uTime + hash12(hsh));
+            vec2 v = center - rippleUv;
+            float d = length(v) - (float(MAX_RADIUS) + 1.0) * t + (uRainStrength * 0.1 * t);
+            float h = 1e-3;
+            float d1 = d - h;
+            float d2 = d + h;
+            float p1 = sin(31.0 * d1) * smoothstep(-0.6, -0.3, d1) * smoothstep(0.0, -0.3, d1);
+            float p2 = sin(31.0 * d2) * smoothstep(-0.6, -0.3, d2) * smoothstep(0.0, -0.3, d2);
+            circles += 0.5 * (v / max(length(v), 1e-4)) * ((p2 - p1) / (2.0 * h) * (1.0 - t) * (1.0 - t));
+          }
+        }
+        circles /= float((MAX_RADIUS * 2 + 1) * (MAX_RADIUS * 2 + 1));
+        return circles;
+      }
+
+      vec3 acesToneMap(vec3 color) {
+        color *= uExposure;
+        return clamp(
+          (color * (2.51 * color + 0.03)) / (color * (2.43 * color + 0.59) + 0.14),
+          0.0,
+          1.0
+        );
+      }
+
+      void main() {
+        vec2 worldUv = vWorldPos.xz;
+
+        float basin = fbm(worldUv * 0.14 + vec2(3.7, 1.3));
+        float rough = texture2D(uRoughnessMap, worldUv * 0.05).r;
+        float puddle = smoothstep(0.44, 0.61, basin + (0.5 - rough) * 0.12);
+        float film = 0.16 + puddle * 0.84;
+
+        float camDist = distance(vWorldPos, cameraPosition);
+        float rippleFade = 1.0 - smoothstep(12.0, 36.0, camDist);
+
+        vec2 grad = vec2(0.0);
+        if (rippleFade > 0.003) {
+          grad = rippleGradient(worldUv * uRippleScale) * rippleFade;
+        }
+
+        vec3 detail = texture2D(uDropletNormal, worldUv * 0.22 + vec2(0.0, uTime * 0.006)).rgb * 2.0 - 1.0;
+
+        vec2 reflectUv = vReflectUv.xy / max(vReflectUv.w, 1e-4);
+        vec2 distortion = grad * uDistortion * puddle + detail.xy * 0.011 * film;
+        float blur = mix(uMipLevels * 0.62, 1.2, puddle) + rough * 0.8;
+        blur = clamp(blur, 0.0, max(uMipLevels - 1.0, 0.0));
+        vec3 reflectedColor = texture2DLodEXT(
+          tReflect,
+          clamp(reflectUv + distortion, vec2(0.001), vec2(0.999)),
+          blur
+        ).rgb;
+
+        vec3 viewDir = normalize(cameraPosition - vWorldPos);
+        float fresnel = pow(1.0 - clamp(viewDir.y, 0.0, 1.0), 1.7);
+        float strength = mix(0.30, 1.0, fresnel);
+
+        float glint = clamp(length(grad) * 0.62, 0.0, 1.0);
+
+        vec3 color = reflectedColor * uLightPower * strength;
+        color += glint * vec3(0.36, 0.66, 0.63) * (0.05 + puddle * 0.16);
+        color = acesToneMap(color);
+        color = pow(color, vec3(1.0 / 2.2));
+
+        float luma = dot(color, vec3(0.299, 0.587, 0.114));
+        float alpha = film * (0.34 + fresnel * 0.42) + luma * 0.34 * puddle;
+        alpha = clamp(alpha, 0.0, 0.94);
+
+        gl_FragColor = vec4(color, alpha);
+      }
+    `,
+  });
+
+  const puddle = new THREE.Mesh(new THREE.PlaneGeometry(44, 78, 1, 1), puddleMaterial);
+  puddle.rotation.x = -Math.PI / 2;
+  puddle.position.set(0, -2.05, -18);
+  scene.add(puddle);
+
+  const reflectorPlane = new THREE.Plane();
+  const reflectorNormal = new THREE.Vector3();
+  const reflectorWorldPosition = new THREE.Vector3();
+  const cameraWorldPosition = new THREE.Vector3();
+  const reflectorRotationMatrix = new THREE.Matrix4();
+  const reflectorLookAt = new THREE.Vector3();
+  const reflectorView = new THREE.Vector3();
+  const reflectorTargetPoint = new THREE.Vector3();
+  const reflectorClipPlane = new THREE.Vector4();
+  const reflectorQ = new THREE.Vector4();
+  const reflectorVirtualCamera = new THREE.PerspectiveCamera();
+
+  const updateReflector = () => {
+    // render() より前に呼ばれるため matrixWorld を明示的に更新する
+    puddle.updateMatrixWorld();
+    camera.updateMatrixWorld();
+    reflectorWorldPosition.setFromMatrixPosition(puddle.matrixWorld);
+    cameraWorldPosition.setFromMatrixPosition(camera.matrixWorld);
+    reflectorRotationMatrix.extractRotation(puddle.matrixWorld);
+
+    reflectorNormal.set(0, 0, 1);
+    reflectorNormal.applyMatrix4(reflectorRotationMatrix);
+
+    reflectorView.subVectors(reflectorWorldPosition, cameraWorldPosition);
+    if (reflectorView.dot(reflectorNormal) > 0) {
+      return;
+    }
+    reflectorView.reflect(reflectorNormal).negate();
+    reflectorView.add(reflectorWorldPosition);
+
+    reflectorRotationMatrix.extractRotation(camera.matrixWorld);
+    reflectorLookAt.set(0, 0, -1);
+    reflectorLookAt.applyMatrix4(reflectorRotationMatrix);
+    reflectorLookAt.add(cameraWorldPosition);
+
+    reflectorTargetPoint.subVectors(reflectorWorldPosition, reflectorLookAt);
+    reflectorTargetPoint.reflect(reflectorNormal).negate();
+    reflectorTargetPoint.add(reflectorWorldPosition);
+
+    reflectorVirtualCamera.position.copy(reflectorView);
+    reflectorVirtualCamera.up.set(0, 1, 0);
+    reflectorVirtualCamera.up.applyMatrix4(reflectorRotationMatrix);
+    reflectorVirtualCamera.up.reflect(reflectorNormal);
+    reflectorVirtualCamera.lookAt(reflectorTargetPoint);
+    reflectorVirtualCamera.far = camera.far;
+    reflectorVirtualCamera.updateMatrixWorld();
+    reflectorVirtualCamera.projectionMatrix.copy(camera.projectionMatrix);
+
+    // テクスチャ行列はオブリーク補正前の射影行列で作る
+    const textureMatrix = puddleMaterial.uniforms.uTextureMatrix.value;
+    textureMatrix.set(
+      0.5, 0.0, 0.0, 0.5,
+      0.0, 0.5, 0.0, 0.5,
+      0.0, 0.0, 0.5, 0.5,
+      0.0, 0.0, 0.0, 1.0
+    );
+    textureMatrix.multiply(reflectorVirtualCamera.projectionMatrix);
+    textureMatrix.multiply(reflectorVirtualCamera.matrixWorldInverse);
+    textureMatrix.multiply(puddle.matrixWorld);
+
+    // 鏡面より下をクリップする oblique near-plane
+    reflectorPlane.setFromNormalAndCoplanarPoint(reflectorNormal, reflectorWorldPosition);
+    reflectorPlane.applyMatrix4(reflectorVirtualCamera.matrixWorldInverse);
+    reflectorClipPlane.set(
+      reflectorPlane.normal.x,
+      reflectorPlane.normal.y,
+      reflectorPlane.normal.z,
+      reflectorPlane.constant
+    );
+
+    const projectionMatrix = reflectorVirtualCamera.projectionMatrix;
+    reflectorQ.x =
+      (Math.sign(reflectorClipPlane.x) + projectionMatrix.elements[8]) / projectionMatrix.elements[0];
+    reflectorQ.y =
+      (Math.sign(reflectorClipPlane.y) + projectionMatrix.elements[9]) / projectionMatrix.elements[5];
+    reflectorQ.z = -1;
+    reflectorQ.w = (1 + projectionMatrix.elements[10]) / projectionMatrix.elements[14];
+    reflectorClipPlane.multiplyScalar(2 / reflectorClipPlane.dot(reflectorQ));
+    projectionMatrix.elements[2] = reflectorClipPlane.x;
+    projectionMatrix.elements[6] = reflectorClipPlane.y;
+    projectionMatrix.elements[10] = reflectorClipPlane.z + 1 - 0.003;
+    projectionMatrix.elements[14] = reflectorClipPlane.w;
+
+    puddle.visible = false;
+    rainGroup.visible = false;
+    const previousTarget = renderer.getRenderTarget();
+    renderer.setRenderTarget(reflectorTarget);
+    renderer.state.buffers.depth.setMask(true);
+    renderer.render(scene, reflectorVirtualCamera);
+    renderer.setRenderTarget(previousTarget);
+    puddle.visible = true;
+    rainGroup.visible = true;
+  };
 
   const wallMaterial = new THREE.MeshStandardMaterial({
     color: "#5d635b",
@@ -507,47 +763,6 @@
   leftLamp.position.set(-9.4, 3.6, -25.42);
   scene.add(leftLamp);
 
-  const reflectionMaterial = new THREE.ShaderMaterial({
-    transparent: true,
-    depthWrite: false,
-    blending: THREE.AdditiveBlending,
-    uniforms: {
-      uLightPower: { value: 1 },
-    },
-    vertexShader: `
-      varying vec2 vUv;
-
-      void main() {
-        vUv = uv;
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-      }
-    `,
-    fragmentShader: `
-      precision mediump float;
-
-      uniform float uLightPower;
-      varying vec2 vUv;
-
-      void main() {
-        vec2 uv = vUv;
-        float perspective = smoothstep(0.02, 0.86, uv.y) * (1.0 - smoothstep(0.93, 1.0, uv.y));
-        float center = 1.0 - smoothstep(0.18, 0.68, abs(uv.x - 0.5));
-        float edgeMask = smoothstep(0.0, 0.2, uv.x) * smoothstep(0.0, 0.2, 1.0 - uv.x);
-        float asphaltSheen = 0.18 + sin(uv.y * 18.0 + sin(uv.x * 10.0) * 0.6) * 0.035;
-        float wet = center * perspective * edgeMask * asphaltSheen;
-        vec3 teal = vec3(0.18, 0.78, 0.78);
-        vec3 warm = vec3(0.95, 0.36, 0.24);
-        vec3 color = mix(teal, warm, smoothstep(0.34, 0.72, uv.x)) * wet * uLightPower;
-        gl_FragColor = vec4(color, wet * 0.48);
-      }
-    `,
-  });
-
-  const reflection = new THREE.Mesh(new THREE.PlaneGeometry(22, 36, 1, 1), reflectionMaterial);
-  reflection.rotation.x = -Math.PI / 2;
-  reflection.position.set(5.6, -2.062, -10.8);
-  scene.add(reflection);
-
   const makeWetStreaks = () => {
     const positions = [];
     for (let i = 0; i < 96; i += 1) {
@@ -573,20 +788,27 @@
   scene.add(ambient);
 
   const signLight = new THREE.PointLight("#44d6c4", 6.2, 42, 1.65);
-  signLight.position.set(5.1, 4.7, -19.4);
+  signLight.position.set(3.7, 4.7, -19.4);
   scene.add(signLight);
 
   const signRimLight = new THREE.PointLight("#e8fffb", 1.8, 18, 1.55);
-  signRimLight.position.set(2.6, 6.15, -23.4);
+  signRimLight.position.set(3.7, 4.7, -19.4);
   scene.add(signRimLight);
 
   const warmLight = new THREE.PointLight("#ff8a62", 2.7, 34, 1.55);
-  warmLight.position.set(12.2, 3.7, -16.2);
+  warmLight.position.set(3.7, 3.7, -20);
   scene.add(warmLight);
 
-  const coolBackLight = new THREE.PointLight("#d7fbff", 4.2, 46, 1.75);
-  coolBackLight.position.set(14, 5.4, -18.2);
+  const coolBackLight = new THREE.PointLight("#d7fbff", 2.7, 46, 1.75);
+  coolBackLight.position.set(12, 2.6, -25);
   scene.add(coolBackLight);
+
+  const coolBackLight2 = new THREE.PointLight("#d7fbff", 2.7, 46, 1.75);
+  coolBackLight2.position.set(13, 7.4, -25);
+  scene.add(coolBackLight2);
+
+//   const helper = new THREE.PointLightHelper(coolBackLight2, 0.5);
+// scene.add(helper);
 
   const warmBackLight = new THREE.PointLight("#ffe0c9", 2.1, 36, 1.82);
   warmBackLight.position.set(-10.8, 3.3, -18.6);
@@ -600,17 +822,182 @@
   lightning.position.set(0, 9.5, -10);
   scene.add(lightning);
 
+
+  const flashOverlay = document.querySelector("[data-lightning-flash]");
+
+  const boltGroup = new THREE.Group();
+  boltGroup.position.set(1.8, 0, -22.5);
+  scene.add(boltGroup);
+
+  const boltPointCapacity = 40;
+  const createBoltStrand = (color, baseOpacity) => {
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute(
+      "position",
+      new THREE.BufferAttribute(new Float32Array(boltPointCapacity * 3), 3)
+    );
+    geometry.setDrawRange(0, 0);
+    const material = new THREE.LineBasicMaterial({
+      color,
+      transparent: true,
+      opacity: 0,
+      depthWrite: false,
+      depthTest: false,
+      blending: THREE.AdditiveBlending,
+      toneMapped: false,
+    });
+    const line = new THREE.Line(geometry, material);
+    line.frustumCulled = false;
+    line.userData.baseOpacity = baseOpacity;
+    boltGroup.add(line);
+    return line;
+  };
+
+  const boltGlowB = createBoltStrand("#6fd4f2", 0.32);
+  const boltGlowA = createBoltStrand("#9fe9ff", 0.55);
+  const boltCore = createBoltStrand("#f4feff", 0.95);
+  const boltBranch = createBoltStrand("#eafcff", 0.6);
+  const boltStrands = [boltCore, boltGlowA, boltGlowB, boltBranch];
+
+  const displaceBoltPath = (start, end, iterations, spread) => {
+    let points = [start.clone(), end.clone()];
+    let amount = spread;
+    for (let iteration = 0; iteration < iterations; iteration += 1) {
+      const next = [points[0]];
+      for (let i = 0; i < points.length - 1; i += 1) {
+        const a = points[i];
+        const b = points[i + 1];
+        const mid = a.clone().lerp(b, 0.5 + THREE.MathUtils.randFloatSpread(0.3));
+        mid.x += THREE.MathUtils.randFloatSpread(amount);
+        mid.z += THREE.MathUtils.randFloatSpread(amount * 0.6);
+        next.push(mid, b);
+      }
+      points = next;
+      amount *= 0.54;
+    }
+    return points;
+  };
+
+  const writeBoltStrand = (line, points, jitter) => {
+    const positions = line.geometry.attributes.position.array;
+    const count = Math.min(points.length, boltPointCapacity);
+    for (let i = 0; i < count; i += 1) {
+      const point = points[i];
+      positions[i * 3] = point.x + (jitter ? THREE.MathUtils.randFloatSpread(jitter) : 0);
+      positions[i * 3 + 1] = point.y;
+      positions[i * 3 + 2] = point.z + (jitter ? THREE.MathUtils.randFloatSpread(jitter * 0.6) : 0);
+    }
+    line.geometry.setDrawRange(0, count);
+    line.geometry.attributes.position.needsUpdate = true;
+    line.geometry.computeBoundingSphere();
+  };
+
+  const regenerateBolt = () => {
+    const top = new THREE.Vector3(
+      THREE.MathUtils.randFloatSpread(1.6),
+      11.2 + THREE.MathUtils.randFloatSpread(0.4),
+      THREE.MathUtils.randFloatSpread(1)
+    );
+    const bottom = new THREE.Vector3(
+      top.x + THREE.MathUtils.randFloatSpread(3.4),
+      THREE.MathUtils.randFloat(2.4, 4.4),
+      top.z + THREE.MathUtils.randFloatSpread(1.6)
+    );
+    const mainPath = displaceBoltPath(top, bottom, 5, 1.3);
+
+    writeBoltStrand(boltCore, mainPath, 0);
+    writeBoltStrand(boltGlowA, mainPath, 0.05);
+    writeBoltStrand(boltGlowB, mainPath, 0.1);
+
+    const branchStart = mainPath[Math.floor(mainPath.length * THREE.MathUtils.randFloat(0.3, 0.55))];
+    const branchEnd = branchStart
+      .clone()
+      .add(
+        new THREE.Vector3(
+          THREE.MathUtils.randFloat(0.9, 1.8) * (Math.random() < 0.5 ? -1 : 1),
+          THREE.MathUtils.randFloat(-2.4, -1.2),
+          THREE.MathUtils.randFloatSpread(1)
+        )
+      );
+    const branchPath = displaceBoltPath(branchStart, branchEnd, 3, 0.7);
+    writeBoltStrand(boltBranch, branchPath, 0);
+  };
+
+  // しずく形のノーマルマップを実行時に生成する (外部素材不要)
+  const createDropNormalTexture = () => {
+    const texWidth = 128;
+    const texHeight = 256;
+    const canvas = document.createElement("canvas");
+    canvas.width = texWidth;
+    canvas.height = texHeight;
+    const ctx = canvas.getContext("2d");
+    const image = ctx.createImageData(texWidth, texHeight);
+    const aspect = texHeight / texWidth;
+    const headV = 0.3;
+    const tailV = 0.92;
+    const maxRadius = 0.3;
+    const bulge = 0.42;
+
+    const profile = (v) => {
+      if (v >= tailV) return 0;
+      if (v <= headV) {
+        const t = ((headV - v) * aspect) / maxRadius;
+        return t >= 1 ? 0 : maxRadius * Math.sqrt(1 - t * t);
+      }
+      const t = (v - headV) / (tailV - headV);
+      return maxRadius * (1 - t) * (0.55 + 0.45 * (1 - t));
+    };
+
+    const heightAt = (u, v) => {
+      const radius = profile(v);
+      if (radius <= 0.0001) return 0;
+      const dx = Math.abs(u - 0.5);
+      if (dx >= radius) return 0;
+      return Math.sqrt(1 - (dx / radius) * (dx / radius)) * bulge;
+    };
+
+    const step = 1 / texWidth;
+    for (let y = 0; y < texHeight; y += 1) {
+      // flipY 前提: canvas 上端がテクスチャ v=1 (しずくの尾) 側になる
+      const v = 1 - (y + 0.5) / texHeight;
+      for (let x = 0; x < texWidth; x += 1) {
+        const u = (x + 0.5) / texWidth;
+        const gradX = (heightAt(u - step, v) - heightAt(u + step, v)) / (2 * step);
+        const gradY = (heightAt(u, v - step) - heightAt(u, v + step)) / (2 * step);
+        const len = Math.sqrt(gradX * gradX + gradY * gradY + 1);
+        const radius = profile(v);
+        const dx = Math.abs(u - 0.5);
+        const alpha = radius > 0 ? THREE.MathUtils.clamp(((radius - dx) / radius) * 5, 0, 1) : 0;
+        const offset = (y * texWidth + x) * 4;
+        image.data[offset] = Math.round(((gradX / len) * 0.5 + 0.5) * 255);
+        image.data[offset + 1] = Math.round(((gradY / len) * 0.5 + 0.5) * 255);
+        image.data[offset + 2] = Math.round(((1 / len) * 0.5 + 0.5) * 255);
+        image.data[offset + 3] = Math.round(alpha * 255);
+      }
+    }
+    ctx.putImageData(image, 0, 0);
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.minFilter = THREE.LinearMipmapLinearFilter;
+    texture.magFilter = THREE.LinearFilter;
+    texture.generateMipmaps = true;
+    return texture;
+  };
+
+  const dropNormalTexture = createDropNormalTexture();
+
   const rainMaterial = new THREE.ShaderMaterial({
     transparent: true,
     depthWrite: false,
-    blending: THREE.AdditiveBlending,
+    blending: THREE.NormalBlending,
     uniforms: {
       uTime: { value: 0 },
       uSpeed: { value: 2.55 },
       uHeightRange: { value: 15 },
       uWind: { value: -0.055 },
-      uOpacity: { value: 0.78 },
-      uRefraction: { value: 0.028 },
+      uOpacity: { value: 0.92 },
+      uRefraction: { value: 0.06 },
+      uBaseBrightness: { value: 0.1 },
+      uNormalMap: { value: dropNormalTexture },
       uBgRt: { value: bgTarget.texture },
     },
     vertexShader: `
@@ -653,29 +1040,28 @@
       precision mediump float;
 
       uniform sampler2D uBgRt;
+      uniform sampler2D uNormalMap;
       uniform float uOpacity;
       uniform float uRefraction;
+      uniform float uBaseBrightness;
 
       varying vec2 vUv;
       varying vec2 vScreen;
       varying float vAlpha;
 
       void main() {
-        float core = 1.0 - smoothstep(0.02, 0.47, abs(vUv.x - 0.5));
-        float taper = smoothstep(0.03, 0.22, vUv.y) * (1.0 - smoothstep(0.72, 1.0, vUv.y));
-        float drop = core * taper;
+        vec4 normalSample = texture2D(uNormalMap, vUv);
+        if (normalSample.a < 0.12) {
+          discard;
+        }
+        vec3 normal = normalize(normalSample.rgb * 2.0 - 1.0);
         vec2 screenUv = clamp(vScreen, vec2(0.001), vec2(0.999));
-        vec2 refractUv = clamp(
-          screenUv + vec2((vUv.x - 0.5) * uRefraction, (vUv.y - 0.5) * uRefraction * 0.7),
-          vec2(0.001),
-          vec2(0.999)
-        );
+        vec2 refractUv = clamp(screenUv + normal.xy * uRefraction, vec2(0.001), vec2(0.999));
         vec3 refracted = texture2D(uBgRt, refractUv).rgb;
-        float edge = smoothstep(0.08, 0.78, core) * (1.0 - smoothstep(0.24, 0.5, abs(vUv.x - 0.5)));
-        float tip = smoothstep(0.7, 0.98, vUv.y) * core * 0.45;
-        float backlight = smoothstep(0.08, 0.62, dot(refracted, vec3(0.299, 0.587, 0.114)));
-        vec3 color = refracted * 0.24 + vec3(edge * 0.18 + tip * 0.08 + backlight * drop * 0.07);
-        float alpha = drop * vAlpha * uOpacity;
+        float coreLight = uBaseBrightness * pow(max(normal.z, 0.0), 10.0);
+        float backlight = smoothstep(0.12, 0.68, dot(refracted, vec3(0.299, 0.587, 0.114)));
+        vec3 color = refracted * (1.0 + backlight * 0.35) + vec3(coreLight);
+        float alpha = normalSample.a * vAlpha * uOpacity;
         if (alpha < 0.006) {
           discard;
         }
@@ -703,8 +1089,8 @@
       offsets[i * 3] = THREE.MathUtils.randFloatSpread(width);
       offsets[i * 3 + 1] = THREE.MathUtils.randFloat(2.8, 5.7);
       offsets[i * 3 + 2] = z;
-      scales[i * 2] = THREE.MathUtils.randFloat(0.022, 0.055) * (0.8 + depthFactor * 1.4);
-      scales[i * 2 + 1] = THREE.MathUtils.randFloat(0.72, 1.75) * (0.78 + depthFactor * 0.72);
+      scales[i * 2] = THREE.MathUtils.randFloat(0.03, 0.072) * (0.8 + depthFactor * 1.4);
+      scales[i * 2 + 1] = THREE.MathUtils.randFloat(0.55, 1.35) * (0.78 + depthFactor * 0.72);
       speeds[i] = THREE.MathUtils.randFloat(1.28, 2.44) * (0.85 + depthFactor * 0.72);
       progresses[i] = Math.random();
       alphas[i] = alphaBase * THREE.MathUtils.randFloat(0.54, 1);
@@ -735,6 +1121,12 @@
     renderer.setSize(width, height, false);
     const targetRatio = 0.32;
     bgTarget.setSize(Math.max(2, Math.floor(width * targetRatio)), Math.max(2, Math.floor(height * targetRatio)));
+    const reflectRatio = isCompact ? 0.35 : 0.5;
+    const reflectWidth = Math.max(2, Math.floor(width * reflectRatio));
+    const reflectHeight = Math.max(2, Math.floor(height * reflectRatio));
+    reflectorTarget.setSize(reflectWidth, reflectHeight);
+    puddleMaterial.uniforms.uMipLevels.value =
+      Math.floor(Math.log2(Math.max(reflectWidth, reflectHeight))) + 1;
     if (glitchCanvas) {
       glitchCanvas.width = Math.max(160, Math.floor(width * 0.48));
       glitchCanvas.height = Math.max(90, Math.floor(height * 0.48));
@@ -765,11 +1157,145 @@
     { passive: true }
   );
 
+  const soundToggle = document.querySelector("[data-sound-toggle]");
+  let audioContext = null;
+  let masterGain = null;
+  let soundEnabled = false;
+  let rainLoopGain = null;
+  let buzzToneGain = null;
+  let buzzNoiseGain = null;
+
+  const createNoiseBuffer = (ctx, duration) => {
+    const length = Math.max(1, Math.floor(ctx.sampleRate * duration));
+    const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < length; i += 1) {
+      data[i] = Math.random() * 2 - 1;
+    }
+    return buffer;
+  };
+
+  const buildSceneAudio = () => {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) {
+      return false;
+    }
+    audioContext = new AudioContextClass();
+    masterGain = audioContext.createGain();
+    masterGain.gain.value = 0;
+    masterGain.connect(audioContext.destination);
+    fetch("audio/Thunder.mp3")
+  .then((response) => response.arrayBuffer())
+  .then((data) => audioContext.decodeAudioData(data))
+  .then((buffer) => {
+    thunderBuffer = buffer;
+  })
+  .catch(() => {
+    thunderBuffer = null;
+  });
+
+   const rainSource = audioContext.createBufferSource();
+rainSource.loop = true;
+rainLoopGain = audioContext.createGain();
+rainLoopGain.gain.value = 0.5;
+rainSource.connect(rainLoopGain);
+rainLoopGain.connect(masterGain);
+
+fetch("audio/rain.mp3")
+  .then((response) => response.arrayBuffer())
+  .then((data) => audioContext.decodeAudioData(data))
+  .then((buffer) => {
+    rainSource.buffer = buffer;
+    rainSource.start();
+  });
+
+    const gustLfo = audioContext.createOscillator();
+    gustLfo.frequency.value = 0.06;
+    const gustLfoGain = audioContext.createGain();
+    gustLfoGain.gain.value = 0.1;
+    gustLfo.connect(gustLfoGain);
+    gustLfoGain.connect(rainLoopGain.gain);
+    gustLfo.start();
+
+    const buzzTone = audioContext.createOscillator();
+    buzzTone.type = "sawtooth";
+    buzzTone.frequency.value = 94;
+    buzzToneGain = audioContext.createGain();
+    buzzToneGain.gain.value = 0.015;
+    buzzTone.connect(buzzToneGain);
+    buzzToneGain.connect(masterGain);
+    buzzTone.start();
+
+    const buzzNoiseSource = audioContext.createBufferSource();
+    buzzNoiseSource.buffer = createNoiseBuffer(audioContext, 2);
+    buzzNoiseSource.loop = true;
+    const buzzNoiseFilter = audioContext.createBiquadFilter();
+    buzzNoiseFilter.type = "bandpass";
+    buzzNoiseFilter.frequency.value = 2500;
+    buzzNoiseFilter.Q.value = 0.7;
+    buzzNoiseGain = audioContext.createGain();
+    buzzNoiseGain.gain.value = 0;
+    buzzNoiseSource.connect(buzzNoiseFilter);
+    buzzNoiseFilter.connect(buzzNoiseGain);
+    buzzNoiseGain.connect(masterGain);
+    buzzNoiseSource.start();
+
+    return true;
+  };
+
+  const updateSignBuzzAudio = (power) => {
+    if (!audioContext || !buzzToneGain || !buzzNoiseGain) {
+      return;
+    }
+    const instability = THREE.MathUtils.clamp(Math.abs(power - 1) * 0.45, 0, 1);
+    const now = audioContext.currentTime;
+    buzzToneGain.gain.setTargetAtTime(0.015 + instability * 0.05, now, 0.03);
+    buzzNoiseGain.gain.setTargetAtTime(instability * 0.18, now, 0.02);
+  };
+
+  const playThunderSound = (strong) => {
+  if (!audioContext || !masterGain || !thunderBuffer) return;
+  const now = audioContext.currentTime;
+  const delay = strong ? THREE.MathUtils.randFloat(0.05, 0.16) : THREE.MathUtils.randFloat(0.25, 0.7);
+  const thunderSource = audioContext.createBufferSource();
+  thunderSource.buffer = thunderBuffer;
+  thunderSource.playbackRate.value = THREE.MathUtils.randFloat(0.94, 1.06);
+  const thunderGain = audioContext.createGain();
+  thunderGain.gain.value = strong ? 0.9 : 0.55;
+  thunderSource.connect(thunderGain);
+  thunderGain.connect(masterGain);
+  thunderSource.start(now + delay);
+};
+
+  if (soundToggle) {
+
+
+    soundToggle.addEventListener("click", () => {
+
+      if (!audioContext) {
+        const ready = buildSceneAudio();
+        if (!ready) {
+          soundToggle.disabled = true;
+          soundToggle.setAttribute("aria-pressed", "false");
+          return;
+        }
+      }
+      if (audioContext.state === "suspended") {
+        audioContext.resume();
+      }
+      soundEnabled = !soundEnabled;
+      soundToggle.setAttribute("aria-pressed", String(soundEnabled));
+      const now = audioContext.currentTime;
+      masterGain.gain.cancelScheduledValues(now);
+      masterGain.gain.setTargetAtTime(soundEnabled ? 0.85 : 0, now, 0.3);
+    });
+  }
+  
+
   let animationFrame = 0;
   let nextFlickerAt = 1.6;
   let flickerUntil = 0;
   let flickerPower = 1;
-  let nextLightningAt = 4.8;
   let nextGlitchAt = 3.4;
   let glitchUntil = 0;
 
@@ -782,6 +1308,7 @@
 
     const power = elapsed < flickerUntil ? flickerPower : 1;
     const flash = Math.max(0, power - 1);
+    updateSignBuzzAudio(power);
     const signBoost = 1 + flash * 0.5;
     const glowBoost = 1 + flash * 0.74;
     signBodyMaterial.color.setRGB(0.82 * signBoost, 1 * signBoost, 0.98 * signBoost);
@@ -795,13 +1322,90 @@
     signLight.intensity = 1.65 + power * 3.45 + flash * 9.8;
     signRimLight.intensity = 1.15 + power * 0.8 + flash * 2.8;
     signLight.distance = 42 + flash * 7;
-    reflectionMaterial.uniforms.uLightPower.value = 1.05 + power * 0.68 + flash * 0.36;
+    puddleMaterial.uniforms.uLightPower.value = 0.94 + power * 0.08 + flash * 0.1;
+  };
 
+  let nextLightningAt = 5.5;
+  let activeLightningStrike = null;
+  const fogBaseColor = new THREE.Color("#061012");
+  const fogFlashColor = new THREE.Color("#bdeeff");
+  const baseToneExposure = renderer.toneMappingExposure;
+
+  const triggerLightningStrike = (elapsed) => {
+    const pulseCount = THREE.MathUtils.randInt(2, 4);
+    const pulses = [];
+    let cursor = 0;
+    for (let i = 0; i < pulseCount; i += 1) {
+      pulses.push({ offset: cursor, peak: i === 0 ? 1 : THREE.MathUtils.randFloat(0.32, 0.78) });
+      cursor += THREE.MathUtils.randFloat(0.04, 0.13);
+    }
+    const showBolt = Math.random() < 0.62;
+    if (showBolt) {
+      regenerateBolt();
+    }
+    const strong = Math.random() < 0.4;
+    playThunderSound(strong);
+    activeLightningStrike = {
+      start: elapsed,
+      pulses,
+      duration: cursor + 0.3,
+      showBolt,
+      strong,
+    };
+  };
+
+  const sampleLightningStrike = (elapsed) => {
+    if (!activeLightningStrike) {
+      return 0;
+    }
+    const t = elapsed - activeLightningStrike.start;
+    if (t > activeLightningStrike.duration) {
+      activeLightningStrike = null;
+      return 0;
+    }
+    let value = 0;
+    activeLightningStrike.pulses.forEach((pulse) => {
+      if (t >= pulse.offset) {
+        value = Math.max(value, pulse.peak * Math.exp(-(t - pulse.offset) * 17));
+      }
+    });
+    return THREE.MathUtils.clamp(value, 0, 1);
+  };
+
+  const updateLightning = (elapsed) => {
     if (elapsed > nextLightningAt) {
-      lightning.intensity = Math.random() < 0.28 ? THREE.MathUtils.randFloat(3.8, 6.4) : 0;
-      nextLightningAt = elapsed + THREE.MathUtils.randFloat(5.8, 10.5);
+      nextLightningAt = elapsed + THREE.MathUtils.randFloat(6, 12);
+      if (Math.random() < 0.45) {
+        triggerLightningStrike(elapsed);
+      }
+    }
+
+    const strength = sampleLightningStrike(elapsed);
+    lightning.intensity = strength * 11.5;
+
+    const boltActive = Boolean(activeLightningStrike && activeLightningStrike.showBolt);
+    const boltOpacity = boltActive ? strength : 0;
+    boltStrands.forEach((line) => {
+      line.material.opacity = boltOpacity * line.userData.baseOpacity;
+    });
+
+    if (flashOverlay) {
+      flashOverlay.style.opacity = (strength * 0.62).toFixed(3);
+    }
+
+    puddleMaterial.uniforms.uLightPower.value += strength * 0.3;
+    renderer.toneMappingExposure = baseToneExposure + strength * 0.4;
+    scene.fog.color.copy(fogBaseColor).lerp(fogFlashColor, strength * 0.75);
+
+    if (activeLightningStrike && activeLightningStrike.strong) {
+      const shake = Math.max(0, 1 - (elapsed - activeLightningStrike.start) * 7) * strength;
+      lightningShakeOffset.set(
+        THREE.MathUtils.randFloatSpread(0.05) * shake,
+        THREE.MathUtils.randFloatSpread(0.032) * shake,
+        0
+      );
     } else {
-      lightning.intensity *= 0.86;
+      lightningShakeOffset.set(0, 0, 0);
     }
   };
 
@@ -991,6 +1595,7 @@
       cameraCurrentLookTarget.y - pointerCurrent.y * 0.38,
       cameraCurrentLookTarget.z
     );
+    camera.position.add(lightningShakeOffset);
     camera.lookAt(dynamicLookTarget);
 
     rainMaterial.uniforms.uTime.value = elapsed;
@@ -998,8 +1603,12 @@
     signGroup.rotation.y = -0.09 + pointerCurrent.x * 0.045;
     signGroup.rotation.x = pointerCurrent.y * 0.012;
     updateLights(elapsed);
+    updateLightning(elapsed);
     updateGlitch(elapsed);
 
+    puddleMaterial.uniforms.uTime.value = elapsed;
+    puddleMaterial.uniforms.uExposure.value = renderer.toneMappingExposure;
+    updateReflector();
     renderBackgroundTarget();
     renderer.render(scene, camera);
 

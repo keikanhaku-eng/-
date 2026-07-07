@@ -505,7 +505,6 @@
         );
       }
       storyTimeline.to(".device-line", { scaleX: 0.48 + (index % 3) * 0.16, duration: 0.48 }, at);
-      storyTimeline.to(".showcase-grid", { rotateZ: index % 2 === 0 ? 0.5 : -0.5, duration: 0.48 }, at);
     });
 
     document.querySelectorAll('.site-nav a[href^="#"]').forEach((link) => {
