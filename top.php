@@ -23,7 +23,7 @@
     <title>敬涵博（ケイ） | 自己紹介</title>
     <link rel="stylesheet" href="css/style.css?v=rain-scene-20260706-2" />
     <script defer src="https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.min.js"></script>
-    <script defer src="js/rain-scene.js?v=rain-ripple-20260707-1"></script>
+    <script defer src="js/rain-scene.js?v=rain-ripple-20260707-2"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
     <script
       defer

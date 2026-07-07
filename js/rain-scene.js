@@ -923,17 +923,81 @@
     writeBoltStrand(boltBranch, branchPath, 0);
   };
 
+  // しずく形のノーマルマップを実行時に生成する (外部素材不要)
+  const createDropNormalTexture = () => {
+    const texWidth = 128;
+    const texHeight = 256;
+    const canvas = document.createElement("canvas");
+    canvas.width = texWidth;
+    canvas.height = texHeight;
+    const ctx = canvas.getContext("2d");
+    const image = ctx.createImageData(texWidth, texHeight);
+    const aspect = texHeight / texWidth;
+    const headV = 0.3;
+    const tailV = 0.92;
+    const maxRadius = 0.3;
+    const bulge = 0.42;
+
+    const profile = (v) => {
+      if (v >= tailV) return 0;
+      if (v <= headV) {
+        const t = ((headV - v) * aspect) / maxRadius;
+        return t >= 1 ? 0 : maxRadius * Math.sqrt(1 - t * t);
+      }
+      const t = (v - headV) / (tailV - headV);
+      return maxRadius * (1 - t) * (0.55 + 0.45 * (1 - t));
+    };
+
+    const heightAt = (u, v) => {
+      const radius = profile(v);
+      if (radius <= 0.0001) return 0;
+      const dx = Math.abs(u - 0.5);
+      if (dx >= radius) return 0;
+      return Math.sqrt(1 - (dx / radius) * (dx / radius)) * bulge;
+    };
+
+    const step = 1 / texWidth;
+    for (let y = 0; y < texHeight; y += 1) {
+      // flipY 前提: canvas 上端がテクスチャ v=1 (しずくの尾) 側になる
+      const v = 1 - (y + 0.5) / texHeight;
+      for (let x = 0; x < texWidth; x += 1) {
+        const u = (x + 0.5) / texWidth;
+        const gradX = (heightAt(u - step, v) - heightAt(u + step, v)) / (2 * step);
+        const gradY = (heightAt(u, v - step) - heightAt(u, v + step)) / (2 * step);
+        const len = Math.sqrt(gradX * gradX + gradY * gradY + 1);
+        const radius = profile(v);
+        const dx = Math.abs(u - 0.5);
+        const alpha = radius > 0 ? THREE.MathUtils.clamp(((radius - dx) / radius) * 5, 0, 1) : 0;
+        const offset = (y * texWidth + x) * 4;
+        image.data[offset] = Math.round(((gradX / len) * 0.5 + 0.5) * 255);
+        image.data[offset + 1] = Math.round(((gradY / len) * 0.5 + 0.5) * 255);
+        image.data[offset + 2] = Math.round(((1 / len) * 0.5 + 0.5) * 255);
+        image.data[offset + 3] = Math.round(alpha * 255);
+      }
+    }
+    ctx.putImageData(image, 0, 0);
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.minFilter = THREE.LinearMipmapLinearFilter;
+    texture.magFilter = THREE.LinearFilter;
+    texture.generateMipmaps = true;
+    return texture;
+  };
+
+  const dropNormalTexture = createDropNormalTexture();
+
   const rainMaterial = new THREE.ShaderMaterial({
     transparent: true,
     depthWrite: false,
-    blending: THREE.AdditiveBlending,
+    blending: THREE.NormalBlending,
     uniforms: {
       uTime: { value: 0 },
       uSpeed: { value: 2.55 },
       uHeightRange: { value: 15 },
       uWind: { value: -0.055 },
-      uOpacity: { value: 0.78 },
-      uRefraction: { value: 0.028 },
+      uOpacity: { value: 0.92 },
+      uRefraction: { value: 0.06 },
+      uBaseBrightness: { value: 0.1 },
+      uNormalMap: { value: dropNormalTexture },
       uBgRt: { value: bgTarget.texture },
     },
     vertexShader: `
@@ -976,29 +1040,28 @@
       precision mediump float;
 
       uniform sampler2D uBgRt;
+      uniform sampler2D uNormalMap;
       uniform float uOpacity;
       uniform float uRefraction;
+      uniform float uBaseBrightness;
 
       varying vec2 vUv;
       varying vec2 vScreen;
       varying float vAlpha;
 
       void main() {
-        float core = 1.0 - smoothstep(0.02, 0.47, abs(vUv.x - 0.5));
-        float taper = smoothstep(0.03, 0.22, vUv.y) * (1.0 - smoothstep(0.72, 1.0, vUv.y));
-        float drop = core * taper;
+        vec4 normalSample = texture2D(uNormalMap, vUv);
+        if (normalSample.a < 0.12) {
+          discard;
+        }
+        vec3 normal = normalize(normalSample.rgb * 2.0 - 1.0);
         vec2 screenUv = clamp(vScreen, vec2(0.001), vec2(0.999));
-        vec2 refractUv = clamp(
-          screenUv + vec2((vUv.x - 0.5) * uRefraction, (vUv.y - 0.5) * uRefraction * 0.7),
-          vec2(0.001),
-          vec2(0.999)
-        );
+        vec2 refractUv = clamp(screenUv + normal.xy * uRefraction, vec2(0.001), vec2(0.999));
         vec3 refracted = texture2D(uBgRt, refractUv).rgb;
-        float edge = smoothstep(0.08, 0.78, core) * (1.0 - smoothstep(0.24, 0.5, abs(vUv.x - 0.5)));
-        float tip = smoothstep(0.7, 0.98, vUv.y) * core * 0.45;
-        float backlight = smoothstep(0.08, 0.62, dot(refracted, vec3(0.299, 0.587, 0.114)));
-        vec3 color = refracted * 0.24 + vec3(edge * 0.18 + tip * 0.08 + backlight * drop * 0.07);
-        float alpha = drop * vAlpha * uOpacity;
+        float coreLight = uBaseBrightness * pow(max(normal.z, 0.0), 10.0);
+        float backlight = smoothstep(0.12, 0.68, dot(refracted, vec3(0.299, 0.587, 0.114)));
+        vec3 color = refracted * (1.0 + backlight * 0.35) + vec3(coreLight);
+        float alpha = normalSample.a * vAlpha * uOpacity;
         if (alpha < 0.006) {
           discard;
         }
@@ -1026,8 +1089,8 @@
       offsets[i * 3] = THREE.MathUtils.randFloatSpread(width);
       offsets[i * 3 + 1] = THREE.MathUtils.randFloat(2.8, 5.7);
       offsets[i * 3 + 2] = z;
-      scales[i * 2] = THREE.MathUtils.randFloat(0.022, 0.055) * (0.8 + depthFactor * 1.4);
-      scales[i * 2 + 1] = THREE.MathUtils.randFloat(0.72, 1.75) * (0.78 + depthFactor * 0.72);
+      scales[i * 2] = THREE.MathUtils.randFloat(0.03, 0.072) * (0.8 + depthFactor * 1.4);
+      scales[i * 2 + 1] = THREE.MathUtils.randFloat(0.55, 1.35) * (0.78 + depthFactor * 0.72);
       speeds[i] = THREE.MathUtils.randFloat(1.28, 2.44) * (0.85 + depthFactor * 0.72);
       progresses[i] = Math.random();
       alphas[i] = alphaBase * THREE.MathUtils.randFloat(0.54, 1);
