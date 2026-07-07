@@ -21,15 +21,15 @@
       content="中国出身の敬涵博（ケイ）の自己紹介ページ。学習経験、資格、強み、趣味、今後の目標を紹介します。"
     />
     <title>敬涵博（ケイ） | 自己紹介</title>
-    <link rel="stylesheet" href="css/style.css?v=rain-scene-20260706-2" />
+    <link rel="stylesheet" href="css/style.css?v=intro-neon-20260707-1" />
     <script defer src="https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.min.js"></script>
-    <script defer src="js/rain-scene.js?v=rain-ripple-20260707-2"></script>
+    <script defer src="js/rain-scene.js?v=intro-neon-20260707-1"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
     <script
       defer
       src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/ScrollTrigger.min.js"
     ></script>
-    <script defer src="js/script.js?v=scene-restore-20260706-1"></script>
+    <script defer src="js/script.js?v=intro-neon-20260707-1"></script>
   </head>
   <body>
     <div class="background-system" aria-hidden="true">
@@ -47,38 +47,15 @@
       <span></span>
     </div>
     <div class="intro-sequence" data-intro>
-      <div class="intro-grid" aria-hidden="true">
-        <span></span>
-        <span></span>
-        <span></span>
-        <span></span>
-      </div>
-      <div class="intro-scan" data-intro-scan aria-hidden="true"></div>
+      <div class="intro-veil" data-intro-veil aria-hidden="true"></div>
       <button class="intro-skip" type="button" data-intro-skip aria-label="オープニングをスキップ">
         SKIP
       </button>
-      <div class="intro-core" data-intro-core>
-        <div class="intro-frame" data-intro-frame aria-hidden="true">
-          <span></span>
-          <span></span>
-          <span></span>
-          <span></span>
-        </div>
-        <div class="intro-title" data-intro-title>
-          <span class="intro-kicker">PROFILE INITIALIZED</span>
-          <strong data-intro-name>敬涵博</strong>
-          <span class="intro-sub" data-intro-sub>KEI / ENGINEER IN TRAINING</span>
-        </div>
-        <div class="intro-plates" aria-hidden="true">
-          <span class="intro-plate intro-plate-back" data-intro-plate="back">Learning</span>
-          <span class="intro-plate intro-plate-middle" data-intro-plate="middle">Culture</span>
-          <span class="intro-plate intro-plate-front" data-intro-plate="front">敬</span>
-        </div>
-        <div class="intro-status" aria-hidden="true">
-          <span data-intro-status></span>
-          <span data-intro-status></span>
-          <span data-intro-status></span>
-        </div>
+      <div class="intro-core" data-intro-core aria-hidden="true">
+        <p class="intro-kicker" data-intro-kicker>SELF INTRODUCTION</p>
+        <p class="intro-name" data-intro-name><span class="intro-char" data-intro-char>敬</span><span class="intro-char" data-intro-char>涵</span><span class="intro-char" data-intro-char>博</span></p>
+        <span class="intro-rule" data-intro-rule></span>
+        <p class="intro-sub" data-intro-sub>KEI / ENGINEER IN TRAINING</p>
       </div>
     </div>
 

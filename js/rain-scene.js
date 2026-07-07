@@ -1331,7 +1331,7 @@ fetch("audio/rain.mp3")
   const fogFlashColor = new THREE.Color("#bdeeff");
   const baseToneExposure = renderer.toneMappingExposure;
 
-  const triggerLightningStrike = (elapsed) => {
+  const triggerLightningStrike = (elapsed, options = {}) => {
     const pulseCount = THREE.MathUtils.randInt(2, 4);
     const pulses = [];
     let cursor = 0;
@@ -1339,11 +1339,11 @@ fetch("audio/rain.mp3")
       pulses.push({ offset: cursor, peak: i === 0 ? 1 : THREE.MathUtils.randFloat(0.32, 0.78) });
       cursor += THREE.MathUtils.randFloat(0.04, 0.13);
     }
-    const showBolt = Math.random() < 0.62;
+    const showBolt = options.showBolt ?? Math.random() < 0.62;
     if (showBolt) {
       regenerateBolt();
     }
-    const strong = Math.random() < 0.4;
+    const strong = options.strong ?? Math.random() < 0.4;
     playThunderSound(strong);
     activeLightningStrike = {
       start: elapsed,
@@ -1353,6 +1353,12 @@ fetch("audio/rain.mp3")
       strong,
     };
   };
+
+  // The intro sequence fires this once at its reveal beat.
+  let forcedLightningRequested = false;
+  window.addEventListener("kei:lightning", () => {
+    forcedLightningRequested = true;
+  });
 
   const sampleLightningStrike = (elapsed) => {
     if (!activeLightningStrike) {
@@ -1373,7 +1379,11 @@ fetch("audio/rain.mp3")
   };
 
   const updateLightning = (elapsed) => {
-    if (elapsed > nextLightningAt) {
+    if (forcedLightningRequested) {
+      forcedLightningRequested = false;
+      nextLightningAt = elapsed + THREE.MathUtils.randFloat(6, 12);
+      triggerLightningStrike(elapsed, { showBolt: true, strong: true });
+    } else if (elapsed > nextLightningAt) {
       nextLightningAt = elapsed + THREE.MathUtils.randFloat(6, 12);
       if (Math.random() < 0.45) {
         triggerLightningStrike(elapsed);

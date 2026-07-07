@@ -81,19 +81,77 @@
     }, 190);
   };
 
+  // Created lazily so its immediate render can't undo the intro's hidden hero state.
+  let heroScrollScene;
+  const createHeroScrollScene = () => {
+    if (heroScrollScene) return;
+
+    heroScrollScene = gsap
+      .timeline({
+        scrollTrigger: {
+          trigger: ".hero",
+          start: "top top",
+          end: "+=115%",
+          scrub: 1,
+          pin: true,
+          anticipatePin: 1,
+        },
+      })
+      .fromTo(
+        "[data-hero-copy]",
+        { y: 0, autoAlpha: 1, filter: "blur(0px)" },
+        { y: 0, autoAlpha: 1, filter: "blur(0px)", duration: 0.38 },
+        0
+      )
+      .to(
+        "[data-hero-copy]",
+        {
+          y: -90,
+          autoAlpha: 0,
+          filter: "blur(16px)",
+          duration: 0.62,
+        },
+        0.38
+      )
+      .to("[data-stage-core]", { rotateY: 28, rotateX: -8, scale: 0.92, duration: 0.62 }, 0.38)
+      .to("[data-layer='front']", { x: 84, y: -28, rotateY: 24, duration: 0.62 }, 0.38)
+      .to("[data-layer='middle']", { x: 20, y: 12, rotateY: -4, duration: 0.62 }, 0.38)
+      .to("[data-layer='back']", { x: -88, y: 50, rotateY: -28, duration: 0.62 }, 0.38);
+  };
+
   const playPageEntrance = () => {
     if (pageEntrancePlayed) return;
 
     pageEntrancePlayed = true;
+    createHeroScrollScene();
 
     if (shouldPlayIntro) {
       gsap
         .timeline({ defaults: { ease: "power3.out" } })
-        .to("[data-animate='header']", { y: 0, autoAlpha: 1, duration: 0.82 }, 0)
-        .to("[data-hero-copy]", { y: 0, autoAlpha: 1, filter: "blur(0px)", duration: 0.9 }, 0.08)
-        .to(
+        .fromTo(
+          "[data-animate='header']",
+          { y: -28, autoAlpha: 0 },
+          { y: 0, autoAlpha: 1, duration: 0.82 },
+          0
+        )
+        .fromTo(
+          "[data-hero-copy]",
+          { y: 30, autoAlpha: 0, filter: "blur(14px)" },
+          { y: 0, autoAlpha: 1, filter: "blur(0px)", duration: 0.9, immediateRender: true },
+          0.08
+        )
+        .fromTo(
           "[data-hero-stage]",
-          { rotateX: 0, rotateY: 0, z: 0, autoAlpha: 1, filter: "blur(0px)", duration: 1 },
+          { rotateX: 7, rotateY: -13, z: -80, autoAlpha: 0, filter: "blur(14px)" },
+          {
+            rotateX: 0,
+            rotateY: 0,
+            z: 0,
+            autoAlpha: 1,
+            filter: "blur(0px)",
+            duration: 1,
+            immediateRender: true,
+          },
           0.22
         );
       return;
@@ -270,83 +328,56 @@
   };
 
   if (shouldPlayIntro) {
-    gsap.set("[data-intro-frame]", {
-      autoAlpha: 0,
-      scale: 0.88,
-      rotateX: 10,
-      filter: "blur(18px)",
-    });
-    gsap.set("[data-intro-title]", { autoAlpha: 0, y: 18, filter: "blur(16px)" });
-    gsap.set("[data-intro-status]", { scaleX: 0.18, autoAlpha: 0.34 });
-    gsap.set("[data-intro-plate='back']", {
-      xPercent: -50,
-      yPercent: -50,
-      x: -28,
-      y: 22,
-      z: -170,
-      rotateX: 5,
-      rotateY: -18,
-      autoAlpha: 0,
-    });
-    gsap.set("[data-intro-plate='middle']", {
-      xPercent: -50,
-      yPercent: -50,
-      x: 10,
-      y: -8,
-      z: -60,
-      rotateX: 3,
-      rotateY: -8,
-      autoAlpha: 0,
-    });
-    gsap.set("[data-intro-plate='front']", {
-      xPercent: -50,
-      yPercent: -50,
-      x: 42,
-      y: -34,
-      z: 84,
-      rotateX: 0,
-      rotateY: 7,
-      autoAlpha: 0,
-    });
+    const introChars = gsap.utils.toArray("[data-intro-char]");
+
+    gsap.set("[data-intro-veil]", { opacity: 1 });
+    gsap.set("[data-intro-kicker]", { autoAlpha: 0, y: 14 });
+    gsap.set(introChars, { autoAlpha: 0 });
+    gsap.set("[data-intro-name]", { filter: "blur(0px) brightness(1)" });
+    gsap.set("[data-intro-rule]", { scaleX: 0, autoAlpha: 0 });
+    gsap.set("[data-intro-sub]", { autoAlpha: 0, y: 12 });
 
     introTimeline = gsap.timeline({
       defaults: { ease: "power3.out" },
       onComplete: finishIntro,
     });
 
+    // Neon-tube strike: hard opacity steps, then lock on.
+    const igniteChar = (target, at) => {
+      introTimeline
+        .set(target, { autoAlpha: 0.45 }, at)
+        .set(target, { autoAlpha: 0.06 }, at + 0.055)
+        .set(target, { autoAlpha: 0.75 }, at + 0.12)
+        .set(target, { autoAlpha: 0.16 }, at + 0.175)
+        .to(target, { autoAlpha: 1, duration: 0.14, ease: "power2.out" }, at + 0.23);
+    };
+
+    introTimeline.to("[data-intro-kicker]", { autoAlpha: 1, y: 0, duration: 0.6 }, 0.15);
+
+    igniteChar(introChars[0], 0.5);
+    igniteChar(introChars[1], 0.82);
+    igniteChar(introChars[2], 1.14);
+
     introTimeline
-      .to("[data-intro-scan]", { scaleX: 1, autoAlpha: 1, duration: 0.44 }, 0.08)
-      .to("[data-intro-scan]", { y: -170, autoAlpha: 0, duration: 0.62 }, 0.52)
+      .to("[data-intro-rule]", { scaleX: 1, autoAlpha: 1, duration: 0.55, ease: "power2.inOut" }, 1.52)
+      .to("[data-intro-sub]", { autoAlpha: 1, y: 0, duration: 0.5 }, 1.68)
+      // The reveal beat: a real lightning strike in the WebGL scene while the veil drops.
+      .call(() => window.dispatchEvent(new CustomEvent("kei:lightning")), null, 2.05)
+      .to("[data-intro-name]", { filter: "blur(0px) brightness(1.85)", duration: 0.09, ease: "power4.out" }, 2.05)
+      .to("[data-intro-name]", { filter: "blur(0px) brightness(1)", duration: 0.55, ease: "power2.out" }, 2.15)
+      .to("[data-intro-veil]", { opacity: 0.38, duration: 0.14, ease: "power4.out" }, 2.05)
+      .to("[data-intro-veil]", { opacity: 0.56, duration: 0.6, ease: "power2.inOut" }, 2.24)
+      // Handoff: the street stays, the title steps aside for the hero.
+      .to("[data-intro-kicker], [data-intro-sub]", { autoAlpha: 0, y: -10, duration: 0.4 }, 2.9)
+      .to("[data-intro-rule]", { scaleX: 0.18, autoAlpha: 0, duration: 0.4 }, 2.9)
       .to(
-        "[data-intro-frame]",
-        { autoAlpha: 1, scale: 1, rotateX: 0, filter: "blur(0px)", duration: 0.74 },
-        0.2
+        "[data-intro-name]",
+        { y: -34, autoAlpha: 0, filter: "blur(9px) brightness(1.1)", duration: 0.55, ease: "power2.in" },
+        3.0
       )
-      .to("[data-intro-title]", { autoAlpha: 1, y: 0, filter: "blur(0px)", duration: 0.78 }, 0.58)
-      .to("[data-intro-status]", { scaleX: 1, autoAlpha: 0.9, duration: 0.7, stagger: 0.08 }, 0.66)
-      .to("[data-intro-plate]", { autoAlpha: 1, duration: 0.58, stagger: 0.08 }, 0.96)
-      .to("[data-intro-title]", { y: -14, autoAlpha: 0, filter: "blur(12px)", duration: 0.42 }, 1.62)
-      .to(
-        "[data-intro-plate='back']",
-        { x: -138, y: 64, z: -190, rotateY: -26, autoAlpha: 0.58, duration: 0.72 },
-        1.72
-      )
-      .to(
-        "[data-intro-plate='middle']",
-        { x: -12, y: 12, z: -34, rotateY: -5, autoAlpha: 0.78, duration: 0.72 },
-        1.72
-      )
-      .to(
-        "[data-intro-plate='front']",
-        { x: 120, y: -56, z: 110, rotateY: 18, autoAlpha: 1, duration: 0.72 },
-        1.72
-      )
-      .to("[data-intro-core]", { scale: 1.04, rotateX: -3, duration: 0.68 }, 1.84)
-      .set("[data-intro-scan]", { y: 180, scaleX: 0, autoAlpha: 0 }, 2.32)
-      .to("[data-intro-scan]", { scaleX: 1, autoAlpha: 1, duration: 0.16, ease: "power4.out" }, 2.34)
-      .to("[data-intro-scan]", { y: 250, autoAlpha: 0, duration: 0.28, ease: "power2.in" }, 2.5)
-      .to("[data-intro-core]", { autoAlpha: 0, scale: 1.12, filter: "blur(18px)", duration: 0.46 }, 2.48)
-      .to(intro, { autoAlpha: 0, duration: 0.5, ease: "power2.inOut" }, 2.62);
+      .to("[data-intro-veil]", { opacity: 0, duration: 0.75, ease: "power2.inOut" }, 3.0)
+      .call(playPageEntrance, null, 3.08)
+      .to(intro, { autoAlpha: 0, duration: 0.4, ease: "power2.inOut" }, 3.4);
   } else {
     playPageEntrance();
   }
@@ -361,38 +392,6 @@
       finishIntro();
     });
   }
-
-  gsap
-    .timeline({
-      scrollTrigger: {
-        trigger: ".hero",
-        start: "top top",
-        end: "+=115%",
-        scrub: 1,
-        pin: true,
-        anticipatePin: 1,
-      },
-    })
-    .fromTo(
-      "[data-hero-copy]",
-      { y: 0, autoAlpha: 1, filter: "blur(0px)" },
-      { y: 0, autoAlpha: 1, filter: "blur(0px)", duration: 0.38 },
-      0
-    )
-    .to(
-      "[data-hero-copy]",
-      {
-        y: -90,
-        autoAlpha: 0,
-        filter: "blur(16px)",
-        duration: 0.62,
-      },
-      0.38
-    )
-    .to("[data-stage-core]", { rotateY: 28, rotateX: -8, scale: 0.92, duration: 0.62 }, 0.38)
-    .to("[data-layer='front']", { x: 84, y: -28, rotateY: 24, duration: 0.62 }, 0.38)
-    .to("[data-layer='middle']", { x: 20, y: 12, rotateY: -4, duration: 0.62 }, 0.38)
-    .to("[data-layer='back']", { x: -88, y: 50, rotateY: -28, duration: 0.62 }, 0.38);
 
   if (desktopQuery.matches) {
     gsap.set(panels, { autoAlpha: 0, yPercent: -50, y: 0, filter: "blur(16px)" });
