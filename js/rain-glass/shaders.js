@@ -13,6 +13,10 @@ uniform sampler2D u_textureShine;
 uniform sampler2D u_textureFg;
 uniform sampler2D u_textureBg;
 
+// Vendored addition: when true, everything outside the droplets stays
+// transparent so the real page (glassmorphism, WebGL street) shows through.
+uniform bool u_transparentBg;
+
 // the texCoords passed in from the vertex shader.
 varying vec2 v_texCoord;
 uniform vec2 u_resolution;
@@ -91,7 +95,12 @@ vec4 fgColor(float x, float y){
 }
 
 void main() {
-  vec4 bg=texture2D(u_textureBg,scaledTexCoord()+parallax(u_parallaxBg));
+  vec4 bg;
+  if(u_transparentBg){
+    bg=vec4(0.0);
+  }else{
+    bg=texture2D(u_textureBg,scaledTexCoord()+parallax(u_parallaxBg));
+  }
 
   vec4 cur = fgColor(0.0,0.0);
 

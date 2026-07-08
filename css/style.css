@@ -873,10 +873,6 @@ main,
   pointer-events: none;
 }
 
-.plate-front .rain-glass-canvas {
-  opacity: 0.94;
-}
-
 .stage-readout {
   position: absolute;
   right: 8px;

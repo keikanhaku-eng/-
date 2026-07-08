@@ -1,9 +1,11 @@
 // Vendored from aling-raining@0.1.3 (dist/lib/core/rain-renderer.js).
-// Changes: import specifiers resolved for native browser ESM, and
-// pause()/resume() added so offscreen panels stop burning GPU frames.
+// Changes: import specifiers resolved for native browser ESM, pause()/resume()
+// added so offscreen panels stop burning GPU frames, and a transparentBg mode
+// that renders droplets over an alpha canvas instead of an opaque texture.
+// The shader import carries a version query to bust stale browser caches.
 import GL from "./gl-obj.js";
 import createCanvas from "./create-canvas.js";
-import { vertShader, fragShader } from "./shaders.js";
+import { vertShader, fragShader } from "./shaders.js?v=intro-neon-20260708-3";
 /**
  * RainRenderer 默认参数配置：
  *
@@ -25,6 +27,7 @@ const defaultOptions = {
     alphaSubtract: 5, // alpha 通道减法系数
     parallaxBg: 5, // 背景视差系数
     parallaxFg: 20, // 前景视差系数
+    transparentBg: false, // 是否透明背景（只渲染水滴，玻璃保持透明）
 };
 class RainRenderer {
     constructor(canvas, canvasLiquid, imageFg, imageBg, imageShine = null, options = {}) {
@@ -50,10 +53,14 @@ class RainRenderer {
     init() {
         this.width = this.canvas.width;
         this.height = this.canvas.height;
-        this.gl = new GL(this.canvas, { alpha: false }, vertShader, fragShader);
+        // Straight (non-premultiplied) alpha matches the shader's blend() output.
+        this.gl = new GL(this.canvas, this.options.transparentBg
+            ? { alpha: true, premultipliedAlpha: false }
+            : { alpha: false }, vertShader, fragShader);
         const gl = this.gl;
         this.programWater = gl.program;
         gl.createUniform("2f", "resolution", this.width, this.height);
+        gl.createUniform("1i", "transparentBg", this.options.transparentBg ? 1 : 0);
         gl.createUniform("1f", "textureRatio", this.imageBg.width / this.imageBg.height);
         gl.createUniform("1i", "renderShine", this.imageShine == null ? false : true);
         gl.createUniform("1i", "renderShadow", this.options.renderShadow);

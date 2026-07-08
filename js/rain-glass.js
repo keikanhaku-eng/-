@@ -2,7 +2,8 @@
 // in js/rain-glass/). Attaches a WebGL rain canvas to the hero front glass
 // plate and to both photo screens of the story showcase device.
 import Raindrops from "./rain-glass/raindrops.js";
-import RainRenderer from "./rain-glass/rain-renderer.js";
+// Version query busts stale browser caches of the modified renderer.
+import RainRenderer from "./rain-glass/rain-renderer.js?v=intro-neon-20260708-3";
 import createCanvas from "./rain-glass/create-canvas.js";
 
 const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -12,6 +13,7 @@ const MAX_DPR = 2;
 const DROP_TEXTURES = {
   alpha: "img/rain/drop-alpha.png",
   color: "img/rain/drop-color.png",
+  shine: "img/rain/drop-shine.png",
 };
 
 // Tuned for ~330x430 panels; Raindrops scales density by area internally.
@@ -116,9 +118,11 @@ const paintNightBokeh = (width, height) => {
   const coral = "rgba(255, 138, 98, ALPHA)";
   const white = "rgba(214, 238, 232, ALPHA)";
 
-  glow(width * 0.74, height * 0.22, width * 0.52, teal, 0.34);
-  glow(width * 0.2, height * 0.68, width * 0.46, gold, 0.2);
-  glow(width * 0.82, height * 0.82, width * 0.4, coral, 0.18);
+  // On the transparent plate this texture is only seen refracted inside the
+  // droplets, so the glows can run brighter than a visible backdrop could.
+  glow(width * 0.74, height * 0.22, width * 0.52, teal, 0.5);
+  glow(width * 0.2, height * 0.68, width * 0.46, gold, 0.32);
+  glow(width * 0.82, height * 0.82, width * 0.4, coral, 0.28);
 
   const palette = [teal, teal, gold, coral, white];
 
@@ -128,7 +132,7 @@ const paintNightBokeh = (width, height) => {
       Math.random() * height,
       4 + Math.random() * Math.random() * width * 0.055,
       palette[Math.floor(Math.random() * palette.length)],
-      0.16 + Math.random() * 0.3
+      0.3 + Math.random() * 0.35
     );
   }
 
@@ -151,12 +155,16 @@ const paintNightBokeh = (width, height) => {
 };
 
 class RainPanel {
-  // insert decides where the canvas sits in the host's paint order:
+  // options.insert decides where the canvas sits in the host's paint order:
   // below text on the hero plate, above the photo on the device screens.
-  constructor(host, paintSource, insert) {
+  // options.renderer overrides RainRenderer settings (e.g. transparentBg);
+  // options.shine adds a highlight texture inside the droplets.
+  constructor(host, paintSource, options = {}) {
     this.host = host;
     this.paintSource = paintSource; // () => canvas | img (current refraction source)
-    this.insert = insert || ((canvas) => host.prepend(canvas));
+    this.insert = options.insert || ((canvas) => host.prepend(canvas));
+    this.rendererOptions = Object.assign({}, RENDER_OPTIONS, options.renderer);
+    this.shine = options.shine || null;
     this.canvas = null;
     this.raindrops = null;
     this.renderer = null;
@@ -236,8 +244,8 @@ class RainPanel {
       this.raindrops.getCanvas(),
       this.textureFg,
       this.textureBg,
-      null,
-      RENDER_OPTIONS
+      this.shine,
+      this.rendererOptions
     );
 
     if (!this.renderer.gl || !this.renderer.gl.gl) {
@@ -325,7 +333,9 @@ const attachPhotoPanel = (screenSelector, photoSelector) => {
   if (!host || !photo) return;
 
   let currentSource = null;
-  const panel = new RainPanel(host, () => currentSource, (canvas) => photo.after(canvas));
+  const panel = new RainPanel(host, () => currentSource, {
+    insert: (canvas) => photo.after(canvas),
+  });
 
   const applySrc = (src) => {
     if (!src) return;
@@ -360,7 +370,14 @@ const buildAll = () => {
     const height = Math.max(plate.clientHeight, 1);
     const bokeh = paintNightBokeh(512, Math.round((512 * height) / width));
 
-    panels.push(new RainPanel(plate, () => bokeh));
+    // Transparent mode: the plate keeps its real glassmorphism and only the
+    // droplets render, refracting the bokeh and glinting via the shine map.
+    panels.push(
+      new RainPanel(plate, () => bokeh, {
+        renderer: { transparentBg: true, brightness: 1.12 },
+        shine: dropTextures.shine,
+      })
+    );
   }
 
   attachPhotoPanel(".device-face-front .device-screen", "[data-device-photo-front]");
@@ -386,12 +403,14 @@ const start = async () => {
   if (!window.WebGLRenderingContext) return;
 
   try {
-    const [alpha, color] = await Promise.all([
+    const [alpha, color, shine] = await Promise.all([
       loadImageCached(DROP_TEXTURES.alpha),
       loadImageCached(DROP_TEXTURES.color),
+      // The shine highlight is optional; drops just lose their glint without it.
+      loadImageCached(DROP_TEXTURES.shine).catch(() => null),
     ]);
 
-    dropTextures = { alpha, color };
+    dropTextures = { alpha, color, shine };
   } catch (error) {
     console.warn("rain-glass: drop textures unavailable, effect disabled.", error);
     return;
