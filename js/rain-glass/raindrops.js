@@ -1,0 +1,457 @@
+import times from './times.js';
+import createCanvas from './create-canvas.js';
+import { random, chance } from './random.js';
+let dropSize = 64;
+// Raindrops 的默认配置项
+/**
+ * Raindrops 默认参数配置：
+ *
+ * minR: 最小水滴半径，单位像素
+ * maxR: 最大水滴半径，单位像素
+ * maxDrops: 画布上最大水滴数量
+ * rainChance: 每帧生成雨滴的概率（0~1）
+ * rainLimit: 每帧最大生成雨滴数量
+ * dropletsRate: 小水滴生成速率（每帧）
+ * dropletsSize: 小水滴半径范围 [最小, 最大]
+ * dropletsCleaningRadiusMultiplier: 清除小水滴时的半径缩放系数
+ * raining: 是否下雨（true/false）
+ * globalTimeScale: 全局时间缩放因子（影响动画快慢）
+ * trailRate: 拖尾生成速率
+ * autoShrink: 是否自动收缩小水滴
+ * spawnArea: 雨滴生成区域的纵向范围（相对 0~1）
+ * trailScaleRange: 拖尾水滴的缩放范围 [最小, 最大]
+ * collisionRadius: 碰撞检测半径系数
+ * collisionRadiusIncrease: 碰撞检测半径随动量增加的增量
+ * dropFallMultiplier: 雨滴下落速度系数
+ * collisionBoostMultiplier: 碰撞后动量提升系数
+ * collisionBoost: 碰撞后基础动量提升
+ */
+export const raindropsDefaultOptions = {
+    minR: 10, // 最小水滴半径
+    maxR: 40, // 最大水滴半径
+    maxDrops: 900, // 最大水滴数量
+    rainChance: 0.3, // 每帧生成雨滴的概率
+    rainLimit: 3, // 每帧最大生成雨滴数量
+    dropletsRate: 50, // 小水滴生成速率
+    dropletsSize: [2, 4], // 小水滴半径范围
+    dropletsCleaningRadiusMultiplier: 0.43, // 清除小水滴时的半径缩放
+    raining: true, // 是否下雨
+    globalTimeScale: 1, // 全局时间缩放
+    trailRate: 1, // 拖尾生成速率
+    autoShrink: true, // 是否自动收缩
+    spawnArea: [-0.1, 0.95], // 雨滴生成区域
+    trailScaleRange: [0.2, 0.5], // 拖尾水滴缩放范围
+    collisionRadius: 0.65, // 碰撞检测半径系数
+    collisionRadiusIncrease: 0.01, // 碰撞检测半径增量
+    dropFallMultiplier: 1, // 下落速度系数
+    collisionBoostMultiplier: 0.05, // 碰撞动量提升系数
+    collisionBoost: 1 // 碰撞基础动量提升
+};
+export default class Raindrops {
+    constructor(width, height, scale, dropAlpha, dropColor, options = {}) {
+        this.canvas = null;
+        this.ctx = null;
+        this.width = 0;
+        this.height = 0;
+        this.scale = 0;
+        this.dropletsPixelDensity = 1;
+        this.droplets = null;
+        this.dropletsCtx = null;
+        this.dropletsCounter = 0; // 画布上水滴的数量
+        this.drops = [];
+        this.dropsGfx = [];
+        this.clearDropletsGfx = null;
+        this.textureCleaningIterations = 0; // 清除小水滴的迭代次数
+        this.lastRender = null;
+        this.animationId = null;
+        this.isRunning = false;
+        this.width = width;
+        this.height = height;
+        this.scale = scale;
+        this.dropAlpha = dropAlpha;
+        this.dropColor = dropColor;
+        this.options = Object.assign({}, raindropsDefaultOptions, options);
+        this.init();
+    }
+    init() {
+        this.canvas = createCanvas(this.width, this.height);
+        this.ctx = this.canvas.getContext('2d');
+        this.droplets = createCanvas(this.width * this.dropletsPixelDensity, this.height * this.dropletsPixelDensity);
+        this.dropletsCtx = this.droplets.getContext('2d');
+        this.drops = [];
+        this.dropsGfx = [];
+        this.renderDropsGfx();
+        this.startAnimation();
+    }
+    get deltaR() {
+        return this.options.maxR - this.options.minR;
+    }
+    get area() {
+        return (this.width * this.height) / this.scale;
+    }
+    get areaMultiplier() {
+        return Math.sqrt(this.area / (1024 * 768));
+    }
+    drawDroplet(x, y, r) {
+        this.drawDrop(this.dropletsCtx, {
+            x: x * this.dropletsPixelDensity,
+            y: y * this.dropletsPixelDensity,
+            r: r * this.dropletsPixelDensity,
+            spreadX: 0,
+            spreadY: 0,
+            momentum: 0,
+            momentumX: 0,
+            lastSpawn: 0,
+            nextSpawn: 0,
+            parent: null,
+            isNew: true,
+            killed: false,
+            shrink: 0
+        });
+    }
+    //重新加载
+    reload() {
+        console.log('开始重新加载Canvas...');
+        // 1. 停止当前动画循环
+        this.pauseAnimation();
+        // 2. 完全清除主Canvas
+        //this.ctx.clearRect(0, 0, this.width, this.height);
+        // // 3. 完全清除小水滴Canvas
+        // this.dropletsCtx.clearRect(0, 0,
+        //   this.width * this.dropletsPixelDensity,
+        //   this.height * this.dropletsPixelDensity
+        // );
+        // // 4. 重置所有状态变量
+        // this.drops = [];
+        // this.dropsGfx = [];
+        // this.clearDropletsGfx = null;
+        // this.dropletsCounter = 0;
+        // this.textureCleaningIterations = 0;
+        // this.lastRender = null;
+        // // 5. 重新创建Canvas (可选，确保完全清洁)
+        // this.canvas = createCanvas(this.width, this.height);
+        // this.ctx = this.canvas.getContext('2d');
+        // this.droplets = createCanvas(
+        //   this.width * this.dropletsPixelDensity,
+        //   this.height * this.dropletsPixelDensity
+        // );
+        // this.dropletsCtx = this.droplets.getContext('2d');
+        // // 6. 重新渲染图形资源
+        // this.renderDropsGfx();
+        // // 7. 重新启动动画
+        // this.isRunning = true;
+        // this.update();
+        // console.log('Canvas重新加载完成！');
+    }
+    //启动动画
+    startAnimation() {
+        if (!this.isRunning) {
+            this.isRunning = true;
+            this.lastRender = null; // 重置时间
+            this.update();
+        }
+    }
+    //终止动画
+    abort() {
+        // 1. 停止动画循环
+        this.pauseAnimation();
+        // 2. 清空主画布内容
+        if (this.ctx && this.canvas) {
+            this.ctx.clearRect(0, 0, this.width, this.height);
+        }
+        // 3. 清空小水滴画布内容
+        if (this.dropletsCtx && this.droplets) {
+            this.dropletsCtx.clearRect(0, 0, this.width * this.dropletsPixelDensity, this.height * this.dropletsPixelDensity);
+        }
+        // 4. 清空所有数据结构
+        if (this.drops)
+            this.drops.length = 0;
+        if (this.dropsGfx)
+            this.dropsGfx.length = 0;
+        if (this.clearDropletsGfx)
+            this.clearDropletsGfx = null;
+        this.dropletsCounter = 0;
+        this.textureCleaningIterations = 0;
+        this.lastRender = null;
+        // 5. 释放canvas和上下文引用，帮助GC
+        this.ctx = null;
+        this.canvas = null;
+        this.dropletsCtx = null;
+        this.droplets = null;
+    }
+    renderDropsGfx() {
+        let dropBuffer = createCanvas(dropSize, dropSize);
+        let dropBufferCtx = dropBuffer.getContext('2d');
+        if (!dropBufferCtx)
+            return;
+        this.dropsGfx = Array.apply(null, Array(255)).map((cur, i) => {
+            let drop = createCanvas(dropSize, dropSize);
+            let dropCtx = drop.getContext('2d');
+            if (!dropCtx)
+                return drop;
+            dropBufferCtx.clearRect(0, 0, dropSize, dropSize);
+            dropBufferCtx.globalCompositeOperation = 'source-over';
+            dropBufferCtx.drawImage(this.dropColor, 0, 0, dropSize, dropSize);
+            dropBufferCtx.globalCompositeOperation = 'screen';
+            dropBufferCtx.fillStyle = 'rgba(0,0,' + i + ',1)';
+            dropBufferCtx.fillRect(0, 0, dropSize, dropSize);
+            dropCtx.globalCompositeOperation = 'source-over';
+            dropCtx.drawImage(this.dropAlpha, 0, 0, dropSize, dropSize);
+            dropCtx.globalCompositeOperation = 'source-in';
+            dropCtx.drawImage(dropBuffer, 0, 0, dropSize, dropSize);
+            return drop;
+        });
+        this.clearDropletsGfx = createCanvas(128, 128);
+        let clearDropletsCtx = this.clearDropletsGfx.getContext('2d');
+        if (clearDropletsCtx) {
+            clearDropletsCtx.fillStyle = '#000';
+            clearDropletsCtx.beginPath();
+            clearDropletsCtx.arc(64, 64, 64, 0, Math.PI * 2);
+            clearDropletsCtx.fill();
+        }
+    }
+    drawDrop(ctx, drop) {
+        if (this.dropsGfx.length > 0) {
+            let x = drop.x;
+            let y = drop.y;
+            let r = drop.r;
+            let spreadX = drop.spreadX;
+            let spreadY = drop.spreadY;
+            // 雨滴受重力影响出现拉长
+            let scaleX = 1;
+            let scaleY = 1.5;
+            let d = Math.max(0, Math.min(1, ((r - this.options.minR) / this.deltaR) * 0.9));
+            d *= 1 / ((drop.spreadX + drop.spreadY) * 0.5 + 1);
+            ctx.globalAlpha = 1;
+            ctx.globalCompositeOperation = 'source-over';
+            d = Math.floor(d * (this.dropsGfx.length - 1));
+            ctx.drawImage(this.dropsGfx[d], (x - r * scaleX * (spreadX + 1)) * this.scale, (y - r * scaleY * (spreadY + 1)) * this.scale, r * 2 * scaleX * (spreadX + 1) * this.scale, r * 2 * scaleY * (spreadY + 1) * this.scale);
+        }
+    }
+    //清除小水滴
+    clearDroplets(x, y, r = 30) {
+        if (!this.dropletsCtx || !this.clearDropletsGfx)
+            return;
+        let ctx = this.dropletsCtx;
+        ctx.globalCompositeOperation = 'destination-out';
+        // 清除小水滴
+        ctx.drawImage(this.clearDropletsGfx, (x - r) * this.dropletsPixelDensity * this.scale, (y - r) * this.dropletsPixelDensity * this.scale, r * 2 * this.dropletsPixelDensity * this.scale, r * 2 * this.dropletsPixelDensity * this.scale * 1.5);
+    }
+    //清除画布
+    clearCanvas() {
+        if (this.ctx) {
+            this.ctx.clearRect(0, 0, this.width, this.height);
+        }
+    }
+    createDrop(options) {
+        if (this.drops.length >= this.options.maxDrops * this.areaMultiplier)
+            return null;
+        return Object.assign({ x: 0, y: 0, r: 0, spreadX: 0, spreadY: 0, momentum: 0, momentumX: 0, lastSpawn: 0, nextSpawn: 0, parent: null, isNew: true, killed: false, shrink: 0 }, options);
+    }
+    addDrop(drop) {
+        if (this.drops.length >= this.options.maxDrops * this.areaMultiplier || drop == null)
+            return false;
+        this.drops.push(drop);
+        return true;
+    }
+    updateRain(timeScale) {
+        let rainDrops = [];
+        if (this.options.raining) {
+            let limit = this.options.rainLimit * timeScale * this.areaMultiplier;
+            let count = 0;
+            while (chance(this.options.rainChance * timeScale * this.areaMultiplier) && count < limit) {
+                count++;
+                let r = random(this.options.minR, this.options.maxR, (n) => {
+                    return Math.pow(n, 3);
+                });
+                let rainDrop = this.createDrop({
+                    x: random(this.width / this.scale),
+                    y: random((this.height / this.scale) * this.options.spawnArea[0], (this.height / this.scale) * this.options.spawnArea[1]),
+                    r: r,
+                    momentum: 1 + (r - this.options.minR) * 0.1 + random(2),
+                    spreadX: 1.5,
+                    spreadY: 1.5
+                });
+                if (rainDrop != null) {
+                    rainDrops.push(rainDrop);
+                }
+            }
+        }
+        return rainDrops;
+    }
+    //清除雨滴
+    clearDrops() {
+        this.drops.forEach((drop) => {
+            setTimeout(() => {
+                drop.shrink = 0.1 + random(0.5);
+            }, random(1200));
+        });
+        this.clearTexture();
+    }
+    clearTexture() {
+        this.textureCleaningIterations = 50;
+    }
+    //暂停动画
+    pauseAnimation() {
+        if (this.animationId) {
+            cancelAnimationFrame(this.animationId);
+            this.animationId = null;
+        }
+        this.isRunning = false;
+    }
+    updateDroplets(timeScale) {
+        if (!this.dropletsCtx)
+            return;
+        if (this.textureCleaningIterations > 0) {
+            this.textureCleaningIterations -= 1 * timeScale;
+            this.dropletsCtx.globalCompositeOperation = 'destination-out';
+            this.dropletsCtx.fillStyle = 'rgba(0,0,0,' + 0.05 * timeScale + ')';
+            this.dropletsCtx.fillRect(0, 0, this.width * this.dropletsPixelDensity, this.height * this.dropletsPixelDensity);
+        }
+        //绘制水滴
+        if (this.options.raining) {
+            //保证雨滴密度
+            this.dropletsCounter += this.options.dropletsRate * timeScale * this.areaMultiplier;
+            //更新每一滴水滴
+            times(this.dropletsCounter, (i) => {
+                this.dropletsCounter--;
+                this.drawDroplet(random(this.width / this.scale), //随机x
+                random(this.height / this.scale), //随机y
+                random(this.options.dropletsSize[0], this.options.dropletsSize[1], (n) => {
+                    return n * n; // 随机水滴的大小
+                }));
+            });
+        }
+        if (this.ctx && this.droplets) {
+            this.ctx.drawImage(this.droplets, 0, 0, this.width, this.height);
+        }
+    }
+    //更新水滴
+    updateDrops(timeScale) {
+        let newDrops = [];
+        this.updateDroplets(timeScale);
+        let rainDrops = this.updateRain(timeScale);
+        newDrops = newDrops.concat(rainDrops);
+        //按照雨滴的纵坐标（y）和横坐标（x）排序，保证渲染顺序正确（视觉上更自然）。
+        this.drops.sort((a, b) => {
+            let va = a.y * (this.width / this.scale) + a.x;
+            let vb = b.y * (this.width / this.scale) + b.x;
+            return va > vb ? 1 : va == vb ? 0 : -1;
+        });
+        this.drops.forEach((drop, i) => {
+            if (!drop.killed) {
+                // update gravity
+                // (chance of drops "creeping down")
+                if (chance((drop.r - this.options.minR * this.options.dropFallMultiplier) *
+                    (0.1 / this.deltaR) *
+                    timeScale)) {
+                    drop.momentum += random((drop.r / this.options.maxR) * 4);
+                }
+                if (this.options.autoShrink && drop.r <= this.options.minR && chance(0.05 * timeScale)) {
+                    drop.shrink += 0.01;
+                }
+                drop.r -= drop.shrink * timeScale;
+                if (drop.r <= 0)
+                    drop.killed = true;
+                if (this.options.raining) {
+                    drop.lastSpawn += drop.momentum * timeScale * this.options.trailRate;
+                    if (drop.lastSpawn > drop.nextSpawn) {
+                        let trailDrop = this.createDrop({
+                            x: drop.x + random(-drop.r, drop.r) * 0.1,
+                            y: drop.y - drop.r * 0.01,
+                            r: drop.r * random(this.options.trailScaleRange[0], this.options.trailScaleRange[1]),
+                            spreadY: drop.momentum * 0.1,
+                            parent: drop
+                        });
+                        if (trailDrop != null) {
+                            newDrops.push(trailDrop);
+                            drop.r *= Math.pow(0.97, timeScale);
+                            drop.lastSpawn = 0;
+                            drop.nextSpawn =
+                                random(this.options.minR, this.options.maxR) -
+                                    drop.momentum * 2 * this.options.trailRate +
+                                    (this.options.maxR - drop.r);
+                        }
+                    }
+                }
+                drop.spreadX *= Math.pow(0.4, timeScale);
+                drop.spreadY *= Math.pow(0.7, timeScale);
+                let moved = drop.momentum > 0;
+                if (moved && !drop.killed) {
+                    drop.y += drop.momentum * this.options.globalTimeScale;
+                    drop.x += drop.momentumX * this.options.globalTimeScale;
+                    if (drop.y > this.height / this.scale + drop.r) {
+                        drop.killed = true;
+                    }
+                }
+                let checkCollision = (moved || drop.isNew) && !drop.killed;
+                drop.isNew = false;
+                if (checkCollision) {
+                    this.drops.slice(i + 1, i + 70).forEach((drop2) => {
+                        if (drop != drop2 &&
+                            drop.r > drop2.r &&
+                            drop.parent != drop2 &&
+                            drop2.parent != drop &&
+                            !drop2.killed) {
+                            let dx = drop2.x - drop.x;
+                            let dy = drop2.y - drop.y;
+                            var d = Math.sqrt(dx * dx + dy * dy);
+                            if (d <
+                                (drop.r + drop2.r) *
+                                    (this.options.collisionRadius +
+                                        drop.momentum * this.options.collisionRadiusIncrease * timeScale)) {
+                                let pi = Math.PI;
+                                let r1 = drop.r;
+                                let r2 = drop2.r;
+                                let a1 = pi * (r1 * r1);
+                                let a2 = pi * (r2 * r2);
+                                let targetR = Math.sqrt((a1 + a2 * 0.8) / pi);
+                                if (targetR > this.options.maxR) {
+                                    targetR = this.options.maxR;
+                                }
+                                drop.r = targetR;
+                                drop.momentumX += dx * 0.1;
+                                drop.spreadX = 0;
+                                drop.spreadY = 0;
+                                drop2.killed = true;
+                                drop.momentum = Math.max(drop2.momentum, Math.min(40, drop.momentum +
+                                    targetR * this.options.collisionBoostMultiplier +
+                                    this.options.collisionBoost));
+                            }
+                        }
+                    });
+                }
+                drop.momentum -= Math.max(1, this.options.minR * 0.5 - drop.momentum) * 0.1 * timeScale;
+                if (drop.momentum < 0)
+                    drop.momentum = 0;
+                drop.momentumX *= Math.pow(0.7, timeScale);
+                if (!drop.killed) {
+                    newDrops.push(drop);
+                    if (moved && this.options.dropletsRate > 0)
+                        this.clearDroplets(drop.x, drop.y, drop.r * this.options.dropletsCleaningRadiusMultiplier);
+                    if (this.ctx) {
+                        this.drawDrop(this.ctx, drop);
+                    }
+                }
+            }
+        });
+        this.drops = newDrops;
+    }
+    update() {
+        this.clearCanvas();
+        let now = Date.now();
+        if (this.lastRender == null)
+            this.lastRender = now;
+        let deltaT = now - this.lastRender;
+        let timeScale = deltaT / ((1 / 60) * 1000);
+        if (timeScale > 1.1)
+            timeScale = 1.1;
+        timeScale *= this.options.globalTimeScale;
+        this.lastRender = now;
+        this.updateDrops(timeScale);
+        this.animationId = requestAnimationFrame(this.update.bind(this));
+    }
+    getCanvas() {
+        return this.canvas;
+    }
+}
