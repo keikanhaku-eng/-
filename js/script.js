@@ -81,7 +81,10 @@
     }, 190);
   };
 
-  // Created lazily so its immediate render can't undo the intro's hidden hero state.
+  // Must be created before the story pin: ScrollTrigger refreshes triggers in
+  // creation order, so the story's start/end only include the hero pin spacer
+  // when this scene exists first. Call it before the intro's hidden-state sets
+  // so its immediate render can't undo them.
   let heroScrollScene;
   const createHeroScrollScene = () => {
     if (heroScrollScene) return;
@@ -123,7 +126,6 @@
     if (pageEntrancePlayed) return;
 
     pageEntrancePlayed = true;
-    createHeroScrollScene();
 
     if (shouldPlayIntro) {
       gsap
@@ -200,6 +202,8 @@
     playPageEntrance();
     window.setTimeout(() => ScrollTrigger.refresh(), 0);
   };
+
+  createHeroScrollScene();
 
   if (shouldPlayIntro) {
     root.classList.add("intro-active");
