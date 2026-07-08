@@ -21,16 +21,16 @@
       content="中国出身の敬涵博（ケイ）の自己紹介ページ。学習経験、資格、強み、趣味、今後の目標を紹介します。"
     />
     <title>敬涵博（ケイ） | 自己紹介</title>
-    <link rel="stylesheet" href="css/style.css?v=intro-neon-20260708-4" />
+    <link rel="stylesheet" href="css/style.css?v=intro-neon-20260708-5" />
     <script defer src="https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.min.js"></script>
-    <script defer src="js/rain-scene.js?v=intro-neon-20260708-4"></script>
+    <script defer src="js/rain-scene.js?v=intro-neon-20260708-5"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
     <script
       defer
       src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/ScrollTrigger.min.js"
     ></script>
-    <script defer src="js/script.js?v=intro-neon-20260708-4"></script>
-    <script type="module" src="js/rain-glass.js?v=intro-neon-20260708-4"></script>
+    <script defer src="js/script.js?v=intro-neon-20260708-5"></script>
+    <script type="module" src="js/rain-glass.js?v=intro-neon-20260708-5"></script>
   </head>
   <body>
     <div class="background-system" aria-hidden="true">
@@ -161,7 +161,7 @@
             <div class="showcase-device" data-device>
               <div class="device-face device-face-front">
                 <div class="device-screen">
-                  <img class="device-photo" data-device-photo-front src="img/test1.png" alt="" onerror="this.hidden=true" />
+                  <img class="device-photo" data-device-photo-front src="img/profile1.jpg" alt="" onerror="this.hidden=true" />
                   <div class="device-line line-one"></div>
                   <div class="device-line line-two"></div>
                   <div class="device-line line-three"></div>
@@ -172,7 +172,7 @@
               </div>
               <div class="device-face device-face-back">
                 <div class="device-screen">
-                  <img class="device-photo" data-device-photo-back src="img/test2.png" alt="" onerror="this.hidden=true" />
+                  <img class="device-photo" data-device-photo-back src="img/profile2.jpg" alt="" onerror="this.hidden=true" />
                   <div class="device-line line-one"></div>
                   <div class="device-line line-two"></div>
                   <div class="device-line line-three"></div>
@@ -194,7 +194,7 @@
               <p class="section-kicker">Profile</p>
               <h2>プロフィール</h2>
               <div class="page-stack" data-page-stack>
-                <div class="story-page" data-page data-word="Profile" data-image="img/test1.png">
+                <div class="story-page" data-page data-word="Profile" data-image="img/profile1.jpg">
                   <p class="page-number">01 / 03</p>
                   <div class="body-copy">
                     <p>
@@ -205,7 +205,7 @@
                     </p>
                   </div>
                 </div>
-                <div class="story-page" data-page data-word="Profile" data-image="img/test1.png">
+                <div class="story-page" data-page data-word="Profile" data-image="img/profile2.jpg">
                   <p class="page-number">02 / 03</p>
                   <div class="body-copy">
                     <p>
@@ -216,7 +216,7 @@
                     </p>
                   </div>
                 </div>
-                <div class="story-page" data-page data-word="Profile" data-image="img/test1.png">
+                <div class="story-page" data-page data-word="Profile" data-image="img/profile3.jpg">
                   <p class="page-number">03 / 03</p>
                   <div class="body-copy">
                     <p>
@@ -236,36 +236,36 @@
               
               <h2>経歴</h2>
               <div class="page-stack" data-page-stack>
-                <div class="story-page" data-page data-word="Career" data-image="img/test3.png">
+                <div class="story-page" data-page data-word="Career" data-image="img/school1.jpg">
                   <p class="page-number">01 / 03</p>
                   <div class="body-copy">
                     <p>
-                      来日後、専門学校で情報処理を学びました。授業だけではなく、生活や人との関わり方も含めて新しい環境に適応してきました。
+                      中国では製薬の専門学校で学びました。ただ正直なところ製薬にはあまり興味を持てず、「エルデンリング」や「ゼルダの伝説」などのゲームに夢中な学生でした。
                     </p>
                     <p>
-                      その経験から、状況を理解してから行動することの大切さを学びました。
+                      卒業後は約1年間日本語を勉強してから、来日しました。
                     </p>
                   </div>
                 </div>
-                <div class="story-page" data-page data-word="Career" data-image="img/test3.png">
+                <div class="story-page" data-page data-word="Career" data-image="img/school2.jpg">
                   <p class="page-number">02 / 03</p>
                   <div class="body-copy">
                     <p>
-                      ITパスポート、ビジネス能力検定、基本情報技術者などの学習を通して、ITの基礎と仕事に必要な考え方を身につけています。
+                      来日後は、千葉県の双葉外語学校で9か月間日本語を学びました。
                     </p>
                     <p>
-                      今は開発現場で使う知識を、実装と復習を繰り返しながら深めています。
+                      この期間は日本語の小説を読んだり、友人とよく東京へ散歩に出かけたりしながら、日本語と日本での生活に少しずつ慣れていきました。
                     </p>
                   </div>
                 </div>
-                <div class="story-page" data-page data-word="Career" data-image="img/test3.png">
+                <div class="story-page" data-page data-word="Career" data-image="img/school3.jpg">
                   <p class="page-number">03 / 03</p>
                   <div class="body-copy">
                     <p>
-                      まずはチームのルールを早く理解し、安定して任せてもらえるエンジニアになることが目標です。
+                      その後、東京・蒲田の日本工学院専門学校に入学し、情報処理を学び始めました。1年目はドン・キホーテでアルバイトもしていました。
                     </p>
                     <p>
-                      将来的にはAIなどの新しい技術も活用し、業務改善に貢献できる人材を目指します。
+                      2年目からはプログラミングの学習に集中し、授業のない時間はほぼ学校で自習して、1日6〜8時間ほど勉強しました。いちばん力を入れて学んだ言語はJavaScriptです。
                     </p>
                   </div>
                 </div>
@@ -295,7 +295,7 @@
               <p class="section-kicker">Hobby</p>
               <h2>好きなもの</h2>
               <div class="page-stack" data-page-stack>
-                <div class="story-page" data-page data-word="Hobby" data-image="img/test2.png">
+                <div class="story-page" data-page data-word="Hobby" data-image="img/food1.jpg">
                   <p class="page-number">01 / 03</p>
                   <div class="body-copy">
                     <p>
@@ -306,7 +306,7 @@
                     </p>
                   </div>
                 </div>
-                <div class="story-page" data-page data-word="Hobby" data-image="img/test2.png">
+                <div class="story-page" data-page data-word="Hobby" data-image="img/food2.jpg">
                   <p class="page-number">02 / 03</p>
                   <div class="body-copy">
                     <p>
@@ -317,7 +317,7 @@
                     </p>
                   </div>
                 </div>
-                <div class="story-page" data-page data-word="Hobby" data-image="img/test2.png">
+                <div class="story-page" data-page data-word="Hobby" data-image="img/food3.jpg">
                   <p class="page-number">03 / 03</p>
                   <div class="body-copy">
                     <p>
