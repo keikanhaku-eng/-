@@ -30,10 +30,13 @@ const DROP_OPTIONS = {
   dropletsCleaningRadiusMultiplier: 0.28,
 };
 
+// All panels run in transparent mode: the canvas only draws the droplets and
+// the real content behind it (photo, glassmorphism) stays fully sharp.
 const RENDER_OPTIONS = {
   brightness: 1.04,
   alphaMultiply: 6,
   alphaSubtract: 3,
+  transparentBg: true,
 };
 
 const loadImage = (src) =>
@@ -263,17 +266,12 @@ class RainPanel {
 
     if (!source || !this.textureBg) return;
 
-    [
-      // Background slightly out of focus, droplets refract the sharper copy.
-      { canvas: this.textureBg, blur: 2.5 },
-      { canvas: this.textureFg, blur: 0 },
-    ].forEach(({ canvas, blur }) => {
+    // In transparent mode only textureFg matters: it is what the droplets
+    // refract. The background never renders, so no blurred copy is drawn.
+    [this.textureBg, this.textureFg].forEach((canvas) => {
       const ctx = canvas.getContext("2d");
 
-      ctx.save();
-      ctx.filter = blur > 0 ? `blur(${blur}px)` : "none";
-      drawCover(ctx, source, canvas.width, canvas.height, blur > 0 ? 8 : 0);
-      ctx.restore();
+      drawCover(ctx, source, canvas.width, canvas.height);
     });
   }
 
@@ -370,11 +368,11 @@ const buildAll = () => {
     const height = Math.max(plate.clientHeight, 1);
     const bokeh = paintNightBokeh(512, Math.round((512 * height) / width));
 
-    // Transparent mode: the plate keeps its real glassmorphism and only the
-    // droplets render, refracting the bokeh and glinting via the shine map.
+    // The plate keeps its real glassmorphism; droplets refract the bokeh
+    // and glint via the shine map.
     panels.push(
       new RainPanel(plate, () => bokeh, {
-        renderer: { transparentBg: true, brightness: 1.12 },
+        renderer: { brightness: 1.12 },
         shine: dropTextures.shine,
       })
     );
