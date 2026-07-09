@@ -18,16 +18,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       name="description"
-      content="中国出身の敬涵博（ケイ）の自己紹介ページ。学習経験、資格、強み、趣味、今後の目標を紹介します。"
+      content="中国出身の敬涵博（ケイ）の自己紹介ページ。学習経験、強み、趣味を紹介します。"
     />
     <title>敬涵博（ケイ） | 自己紹介</title>
     <link rel="stylesheet" href="css/style.css?v=intro-neon-20260708-5" />
-    <script defer src="https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.min.js"></script>
+    <script defer src="js/vendor/three.min.js?v=intro-neon-20260708-5"></script>
     <script defer src="js/rain-scene.js?v=intro-neon-20260708-5"></script>
-    <script defer src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+    <script defer src="js/vendor/gsap.min.js?v=intro-neon-20260708-5"></script>
     <script
       defer
-      src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/ScrollTrigger.min.js"
+      src="js/vendor/ScrollTrigger.min.js?v=intro-neon-20260708-5"
     ></script>
     <script defer src="js/script.js?v=intro-neon-20260708-5"></script>
     <script type="module" src="js/rain-glass.js?v=intro-neon-20260708-5"></script>
@@ -74,7 +74,7 @@
         class="sound-toggle"
         type="button"
         data-sound-toggle
-        aria-pressed="true"
+        aria-pressed="false"
         aria-label="雨音・雷鳴・ネオンのノイズ音を再生"
       >
         <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">
@@ -272,23 +272,6 @@
               </div>
             
             </article>
-
-            <!-- <article id="skills" class="story-panel" data-panel="skills" hidden>
-              
-              <h2>資格と現在学んでいる技術</h2>
-              <div class="tag-grid" aria-label="資格と技術一覧">
-                <span>ITパスポート</span>
-                <span>ビジネス能力検定 3級</span>
-                <span>基本情報技術者</span>
-                <span>Java</span>
-                <span>Spring Boot</span>
-                <span>Git</span>
-                <span>MySQL / SQL</span>
-                <span>AI活用</span>
-              </div>
-            </article> -->
-
-          
 
             <article id="hobby" class="story-panel" data-panel="hobby" data-word="Hobby">
             
