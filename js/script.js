@@ -331,6 +331,16 @@
     syncDeviceWords(activeIndex, direction);
   };
 
+  // Decode every step image up front so the face swap never waits on a network
+  // load mid-flip.
+  const preloadedImages = new Set();
+  pageSteps.forEach((step) => {
+    if (!step.image || preloadedImages.has(step.image)) return;
+    preloadedImages.add(step.image);
+    const img = new Image();
+    img.src = step.image;
+  });
+
   if (shouldPlayIntro) {
     const introChars = gsap.utils.toArray("[data-intro-char]");
 
@@ -408,8 +418,25 @@
     gsap.set(deviceSelector, { xPercent: 0, rotateX: 4, rotateY: 0, rotateZ: 0, autoAlpha: 1 });
     syncDeviceWords(0, 1);
 
+    // Sync the device faces from the timeline's own onUpdate, not the
+    // ScrollTrigger's: with scrub smoothing the animation keeps playing after
+    // the last scroll event, and only this callback fires on those catch-up
+    // frames — otherwise the face swap misses the flip midpoint.
+    let lastStoryTime = 0;
+    let lastStoryDirection = 1;
+
     const storyTimeline = gsap.timeline({
       defaults: { ease: "none" },
+      onUpdate() {
+        const time = this.time();
+
+        if (time !== lastStoryTime) {
+          lastStoryDirection = time > lastStoryTime ? 1 : -1;
+          lastStoryTime = time;
+        }
+
+        syncDeviceWordsFromTime(time, lastStoryDirection);
+      },
       scrollTrigger: {
         trigger: ".story",
         start: "top top",
@@ -417,10 +444,6 @@
         scrub: 1,
         pin: ".story-pin",
         anticipatePin: 1,
-        onUpdate: (self) => {
-          const time = self.animation ? self.animation.time() : 0;
-          syncDeviceWordsFromTime(time, self.direction || 1);
-        },
       },
     });
 
