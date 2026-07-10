@@ -21,7 +21,7 @@
       content="中国出身の敬涵博（ケイ）の自己紹介ページ。学習経験、強み、趣味を紹介します。"
     />
     <title>敬涵博（ケイ） | 自己紹介</title>
-    <link rel="stylesheet" href="css/style.css?v=intro-neon-20260709-1" />
+    <link rel="stylesheet" href="css/style.css?v=liquid-glass-20260710-1" />
     <script defer src="js/vendor/three.min.js?v=intro-neon-20260709-1"></script>
     <script defer src="js/rain-scene.js?v=intro-neon-20260709-1"></script>
     <script defer src="js/vendor/gsap.min.js?v=intro-neon-20260709-1"></script>
@@ -29,7 +29,8 @@
       defer
       src="js/vendor/ScrollTrigger.min.js?v=intro-neon-20260709-1"
     ></script>
-    <script defer src="js/script.js?v=intro-neon-20260709-1"></script>
+    <script defer src="js/script.js?v=liquid-glass-20260710-1"></script>
+    <script defer src="js/liquid-glass-panels.js?v=liquid-glass-20260710-1"></script>
     <script type="module" src="js/rain-glass.js?v=intro-neon-20260709-1"></script>
   </head>
   <body>

@@ -26,7 +26,38 @@
 
   const SVG_NS = "http://www.w3.org/2000/svg";
   const XLINK_NS = "http://www.w3.org/1999/xlink";
-  const PANEL_SELECTOR = ".story-panel:not([hidden])";
+
+  // The refraction is applied via inline backdrop-filter on the element itself:
+  // a child overlay would lose its backdrop once an ancestor carries opacity or
+  // a filter (both make it a backdrop root), which the GSAP scenes rely on.
+  const TARGETS = [
+    {
+      // Hero: the three floating glass folders.
+      selector: ".glass-plate",
+      filter: "blur(8px) contrast(1.14) brightness(1.1) saturate(1.35)",
+      strength: 1.2,
+      wave: 0.6,
+    },
+    {
+      // Story: the photo frame faces on the left.
+      selector: ".device-face",
+      filter: "blur(10px) contrast(1.1) brightness(1.06) saturate(1.3)",
+      strength: 1.05,
+      wave: 0.5,
+    },
+    {
+      // Story: the dark text panels on the right.
+      selector: ".story-panel:not([hidden])",
+      filter: "blur(16px) contrast(1.12) brightness(0.94) saturate(1.24)",
+      strength: 1.4,
+      wave: 1,
+    },
+  ];
+
+  // Displacement maps are generated at reduced resolution and stretched by
+  // feImage (preserveAspectRatio="none"): the per-pixel loop stays cheap even
+  // for the large story panels, and a displacement map needs no fine detail.
+  const MAP_MAX_SIZE = 240;
 
   function smoothStep(a, b, t) {
     t = Math.max(0, Math.min(1, (t - a) / (b - a)));
@@ -51,93 +82,108 @@
     return `liquid-glass-${Math.random().toString(36).slice(2, 11)}`;
   }
 
-  class LiquidGlassPanel {
-    constructor(panel, index) {
-      this.panel = panel;
-      this.index = index;
-      this.id = generateId();
-      this.canvasDPI = 1;
-      this.width = 1;
-      this.height = 1;
+  let sharedSvg = null;
+  let sharedDefs = null;
 
-      this.createElements();
+  function ensureDefs() {
+    if (sharedDefs) return sharedDefs;
+
+    sharedSvg = document.createElementNS(SVG_NS, "svg");
+    sharedSvg.setAttribute("xmlns", SVG_NS);
+    sharedSvg.setAttribute("width", "0");
+    sharedSvg.setAttribute("height", "0");
+    sharedSvg.setAttribute("aria-hidden", "true");
+    sharedSvg.classList.add("liquid-glass-defs");
+    sharedSvg.style.cssText = "position:fixed;top:0;left:0;width:0;height:0;overflow:hidden;pointer-events:none;";
+
+    sharedDefs = document.createElementNS(SVG_NS, "defs");
+    sharedSvg.appendChild(sharedDefs);
+    document.body.appendChild(sharedSvg);
+
+    return sharedDefs;
+  }
+
+  class LiquidGlassSurface {
+    constructor(element, index, options) {
+      this.element = element;
+      this.index = index;
+      this.options = options;
+      this.id = generateId();
+      this.width = 0;
+      this.height = 0;
+      this.mapWidth = 0;
+      this.mapHeight = 0;
+      this.mapScale = 1;
+
+      this.createFilter();
+      this.canvas = document.createElement("canvas");
+      this.context = this.canvas.getContext("2d", { willReadFrequently: false });
+
       this.updateSize();
       this.updateShader();
+
+      const filterValue = `url(#${this.id}) ${options.filter}`;
+      this.element.style.webkitBackdropFilter = filterValue;
+      this.element.style.backdropFilter = filterValue;
+      this.element.classList.add("has-liquid-glass");
     }
 
-    createElements() {
-      this.svg = document.createElementNS(SVG_NS, "svg");
-      this.svg.setAttribute("xmlns", SVG_NS);
-      this.svg.setAttribute("width", "0");
-      this.svg.setAttribute("height", "0");
-      this.svg.setAttribute("aria-hidden", "true");
-      this.svg.classList.add("liquid-glass-svg");
+    createFilter() {
+      const defs = ensureDefs();
 
-      const defs = document.createElementNS(SVG_NS, "defs");
       this.filter = document.createElementNS(SVG_NS, "filter");
-      this.filter.setAttribute("id", `${this.id}_filter`);
+      this.filter.setAttribute("id", this.id);
       this.filter.setAttribute("filterUnits", "userSpaceOnUse");
       this.filter.setAttribute("colorInterpolationFilters", "sRGB");
       this.filter.setAttribute("x", "0");
       this.filter.setAttribute("y", "0");
 
       this.feImage = document.createElementNS(SVG_NS, "feImage");
-      this.feImage.setAttribute("id", `${this.id}_map`);
+      this.feImage.setAttribute("result", `${this.id}-map`);
+      this.feImage.setAttribute("preserveAspectRatio", "none");
 
       this.feDisplacementMap = document.createElementNS(SVG_NS, "feDisplacementMap");
       this.feDisplacementMap.setAttribute("in", "SourceGraphic");
-      this.feDisplacementMap.setAttribute("in2", `${this.id}_map`);
+      this.feDisplacementMap.setAttribute("in2", `${this.id}-map`);
       this.feDisplacementMap.setAttribute("xChannelSelector", "R");
       this.feDisplacementMap.setAttribute("yChannelSelector", "G");
 
       this.filter.appendChild(this.feImage);
       this.filter.appendChild(this.feDisplacementMap);
       defs.appendChild(this.filter);
-      this.svg.appendChild(defs);
-
-      this.backdrop = document.createElement("span");
-      this.backdrop.className = "liquid-glass-backdrop";
-      this.backdrop.setAttribute("aria-hidden", "true");
-
-      const filterValue = `url(#${this.id}_filter) blur(18px) contrast(1.18) brightness(1.08) saturate(1.24)`;
-      this.backdrop.style.webkitBackdropFilter = filterValue;
-      this.backdrop.style.backdropFilter = filterValue;
-
-      this.canvas = document.createElement("canvas");
-      this.context = this.canvas.getContext("2d", { willReadFrequently: false });
-
-      this.panel.prepend(this.svg);
-      this.panel.prepend(this.backdrop);
-      this.panel.classList.add("has-liquid-glass");
     }
 
-    getTargetSize() {
-      const backdropRect = this.backdrop.getBoundingClientRect();
-      const panelRect = this.panel.getBoundingClientRect();
-      const width = Math.round(backdropRect.width || panelRect.width || 1);
-      const height = Math.round(backdropRect.height || panelRect.height || 1);
+    getLayoutSize() {
+      // offsetWidth/Height is the untransformed layout size, which is what the
+      // userSpaceOnUse filter region maps to even while plates are 3D-tilted;
+      // getBoundingClientRect would return the projected (skewed) bounds.
+      const width = this.element.offsetWidth || this.element.getBoundingClientRect().width;
+      const height = this.element.offsetHeight || this.element.getBoundingClientRect().height;
 
       return {
-        width: Math.max(1, width),
-        height: Math.max(1, height),
+        width: Math.max(1, Math.round(width)),
+        height: Math.max(1, Math.round(height)),
       };
     }
 
     updateSize() {
-      const { width, height } = this.getTargetSize();
+      const { width, height } = this.getLayoutSize();
 
       if (width === this.width && height === this.height) return false;
 
       this.width = width;
       this.height = height;
+      this.mapScale = Math.min(1, MAP_MAX_SIZE / Math.max(width, height));
+      this.mapWidth = Math.max(1, Math.round(width * this.mapScale));
+      this.mapHeight = Math.max(1, Math.round(height * this.mapScale));
 
       this.filter.setAttribute("width", String(width));
       this.filter.setAttribute("height", String(height));
       this.feImage.setAttribute("width", String(width));
       this.feImage.setAttribute("height", String(height));
 
-      this.canvas.width = Math.max(1, Math.round(width * this.canvasDPI));
-      this.canvas.height = Math.max(1, Math.round(height * this.canvasDPI));
+      this.canvas.width = this.mapWidth;
+      this.canvas.height = this.mapHeight;
 
       return true;
     }
@@ -152,8 +198,8 @@
       const displacement = smoothStep(0.72, 0, distanceToEdge - 0.14);
       const scaled = smoothStep(0, 1, displacement);
       const phase = this.index * 0.7;
-      const waveX = Math.sin((uv.y * 6.2 + uv.x * 2.4 + phase) * Math.PI) * 0.012 * scaled;
-      const waveY = Math.cos((uv.x * 4.8 - uv.y * 2.2 + phase) * Math.PI) * 0.01 * scaled;
+      const waveX = Math.sin((uv.y * 6.2 + uv.x * 2.4 + phase) * Math.PI) * 0.012 * scaled * this.options.wave;
+      const waveY = Math.cos((uv.x * 4.8 - uv.y * 2.2 + phase) * Math.PI) * 0.01 * scaled * this.options.wave;
 
       return texture(ix * scaled + 0.5 + waveX, iy * scaled + 0.5 + waveY);
     }
@@ -161,8 +207,8 @@
     updateShader() {
       if (!this.context) return;
 
-      const w = this.canvas.width;
-      const h = this.canvas.height;
+      const w = this.mapWidth;
+      const h = this.mapHeight;
       const data = new Uint8ClampedArray(w * h * 4);
       const rawValues = [];
       let maxScale = 0;
@@ -195,7 +241,12 @@
       const displacementMap = this.canvas.toDataURL();
       this.feImage.setAttributeNS(XLINK_NS, "href", displacementMap);
       this.feImage.setAttribute("href", displacementMap);
-      this.feDisplacementMap.setAttribute("scale", String(maxScale / this.canvasDPI));
+      // maxScale is measured in map pixels; dividing by mapScale converts the
+      // displacement back to element pixels after feImage stretches the map.
+      this.feDisplacementMap.setAttribute(
+        "scale",
+        String((maxScale / this.mapScale) * this.options.strength)
+      );
     }
 
     refresh() {
@@ -205,16 +256,21 @@
     }
 
     destroy() {
-      this.svg.remove();
-      this.backdrop.remove();
-      this.canvas.remove();
-      this.panel.classList.remove("has-liquid-glass");
+      this.filter.remove();
+      this.element.style.webkitBackdropFilter = "";
+      this.element.style.backdropFilter = "";
+      this.element.classList.remove("has-liquid-glass");
     }
   }
 
-  function initLiquidGlassPanels() {
-    const panels = Array.from(document.querySelectorAll(PANEL_SELECTOR));
-    const instances = panels.map((panel, index) => new LiquidGlassPanel(panel, index));
+  function initLiquidGlass() {
+    const instances = [];
+
+    TARGETS.forEach((target) => {
+      document.querySelectorAll(target.selector).forEach((element) => {
+        instances.push(new LiquidGlassSurface(element, instances.length, target));
+      });
+    });
 
     if (!instances.length) return;
 
@@ -222,7 +278,7 @@
 
     if ("ResizeObserver" in window) {
       const resizeObserver = new ResizeObserver(refresh);
-      panels.forEach((panel) => resizeObserver.observe(panel));
+      instances.forEach((instance) => resizeObserver.observe(instance.element));
     }
 
     window.addEventListener("load", refresh, { once: true });
@@ -231,13 +287,18 @@
       refresh,
       destroy() {
         instances.forEach((instance) => instance.destroy());
+        if (sharedSvg) {
+          sharedSvg.remove();
+          sharedSvg = null;
+          sharedDefs = null;
+        }
       },
     };
   }
 
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", initLiquidGlassPanels, { once: true });
+    document.addEventListener("DOMContentLoaded", initLiquidGlass, { once: true });
   } else {
-    initLiquidGlassPanels();
+    initLiquidGlass();
   }
 })();

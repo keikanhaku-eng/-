@@ -153,6 +153,9 @@
             filter: "blur(0px)",
             duration: 1,
             immediateRender: true,
+            // A leftover inline filter (even blur(0px)) turns the stage into a
+            // backdrop root and cuts the glass plates off from the scene behind.
+            clearProps: "filter",
           },
           0.22
         );
@@ -182,6 +185,7 @@
       duration: 1.05,
       ease: "power3.out",
       delay: 0.2,
+      clearProps: "filter",
     });
   };
 
