@@ -30,27 +30,36 @@
   // The refraction is applied via inline backdrop-filter on the element itself:
   // a child overlay would lose its backdrop once an ancestor carries opacity or
   // a filter (both make it a backdrop root), which the GSAP scenes rely on.
+  // magnify: how hard the bezel band compresses the backdrop toward the
+  // centre (0..1); bezel: width of that band as a fraction of the surface;
+  // radius: corner rounding of the lens field in uv units.
   const TARGETS = [
     {
       // Hero: the three floating glass folders.
       selector: ".glass-plate",
-      filter: "blur(8px) contrast(1.14) brightness(1.1) saturate(1.35)",
-      strength: 1.2,
-      wave: 0.6,
+      filter: "blur(4px) contrast(1.12) brightness(1.1) saturate(1.3)",
+      magnify: 0.26,
+      bezel: 0.22,
+      radius: 0.14,
+      wave: 0.9,
     },
     {
       // Story: the photo frame faces on the left.
       selector: ".device-face",
-      filter: "blur(10px) contrast(1.1) brightness(1.06) saturate(1.3)",
-      strength: 1.05,
-      wave: 0.5,
+      filter: "blur(6px) contrast(1.1) brightness(1.06) saturate(1.28)",
+      magnify: 0.22,
+      bezel: 0.18,
+      radius: 0.1,
+      wave: 0.6,
     },
     {
       // Story: the dark text panels on the right.
       selector: ".story-panel:not([hidden])",
-      filter: "blur(16px) contrast(1.12) brightness(0.94) saturate(1.24)",
-      strength: 1.4,
-      wave: 1,
+      filter: "blur(14px) contrast(1.1) brightness(0.96) saturate(1.22)",
+      magnify: 0.16,
+      bezel: 0.15,
+      radius: 0.06,
+      wave: 0.7,
     },
   ];
 
@@ -118,6 +127,8 @@
       this.createFilter();
       this.canvas = document.createElement("canvas");
       this.context = this.canvas.getContext("2d", { willReadFrequently: false });
+      this.outputCanvas = document.createElement("canvas");
+      this.outputContext = this.outputCanvas.getContext("2d");
 
       this.updateSize();
       this.updateShader();
@@ -191,15 +202,16 @@
     fragment(uv) {
       const ix = uv.x - 0.5;
       const iy = uv.y - 0.5;
-      const aspect = this.width / Math.max(this.height, 1);
-      const edgeWidth = aspect > 1.2 ? 0.42 : 0.36;
-      const edgeHeight = aspect > 1.2 ? 0.3 : 0.36;
-      const distanceToEdge = roundedRectSDF(ix, iy, edgeWidth, edgeHeight, 0.28);
-      const displacement = smoothStep(0.72, 0, distanceToEdge - 0.14);
-      const scaled = smoothStep(0, 1, displacement);
+      // Depth inside the surface: 0 at the border, rising toward the centre.
+      const depth = -roundedRectSDF(ix, iy, 0.5, 0.5, this.options.radius);
+      // rim is 1 on the border and fades out across the bezel band, so the
+      // centre stays undistorted while the edge bends like a lens.
+      const rim = smoothStep(this.options.bezel, 0, depth);
+      const scaled = 1 - rim * this.options.magnify;
       const phase = this.index * 0.7;
-      const waveX = Math.sin((uv.y * 6.2 + uv.x * 2.4 + phase) * Math.PI) * 0.012 * scaled * this.options.wave;
-      const waveY = Math.cos((uv.x * 4.8 - uv.y * 2.2 + phase) * Math.PI) * 0.01 * scaled * this.options.wave;
+      const waveAmp = 0.012 * this.options.wave * (0.35 + 0.65 * rim);
+      const waveX = Math.sin((uv.y * 6.2 + uv.x * 2.4 + phase) * Math.PI) * waveAmp;
+      const waveY = Math.cos((uv.x * 4.8 - uv.y * 2.2 + phase) * Math.PI) * waveAmp * 0.8;
 
       return texture(ix * scaled + 0.5 + waveX, iy * scaled + 0.5 + waveY);
     }
@@ -238,15 +250,22 @@
       }
 
       this.context.putImageData(new ImageData(data, w, h), 0, 0);
-      const displacementMap = this.canvas.toDataURL();
+
+      // Upload the map at the element's full size: Chromium does not reliably
+      // stretch a smaller feImage across the filter region, so the cheap
+      // low-res map is upscaled here instead.
+      this.outputCanvas.width = this.width;
+      this.outputCanvas.height = this.height;
+      this.outputContext.imageSmoothingEnabled = true;
+      this.outputContext.imageSmoothingQuality = "high";
+      this.outputContext.drawImage(this.canvas, 0, 0, this.width, this.height);
+
+      const displacementMap = this.outputCanvas.toDataURL();
       this.feImage.setAttributeNS(XLINK_NS, "href", displacementMap);
       this.feImage.setAttribute("href", displacementMap);
       // maxScale is measured in map pixels; dividing by mapScale converts the
-      // displacement back to element pixels after feImage stretches the map.
-      this.feDisplacementMap.setAttribute(
-        "scale",
-        String((maxScale / this.mapScale) * this.options.strength)
-      );
+      // displacement back to element pixels.
+      this.feDisplacementMap.setAttribute("scale", String(maxScale / this.mapScale));
     }
 
     refresh() {

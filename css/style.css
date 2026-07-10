@@ -1582,8 +1582,8 @@ main,
 
 .story-panel.has-liquid-glass {
   border-color: rgba(190, 255, 247, 0.24);
-  -webkit-backdrop-filter: blur(16px) saturate(124%);
-  backdrop-filter: blur(16px) saturate(124%);
+  -webkit-backdrop-filter: blur(14px) saturate(124%);
+  backdrop-filter: blur(14px) saturate(124%);
 }
 
 /* Once the glass carries the blur, the near-opaque coat becomes a translucent
