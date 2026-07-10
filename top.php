@@ -29,7 +29,7 @@
       defer
       src="js/vendor/ScrollTrigger.min.js?v=intro-neon-20260709-1"
     ></script>
-    <script defer src="js/script.js?v=liquid-glass-20260710-2"></script>
+    <script defer src="js/script.js?v=liquid-glass-20260710-3"></script>
     <script defer src="js/liquid-glass-panels.js?v=liquid-glass-20260710-2"></script>
     <script type="module" src="js/rain-glass.js?v=intro-neon-20260709-1"></script>
   </head>

@@ -122,13 +122,42 @@
       .to("[data-layer='back']", { x: -88, y: 50, rotateY: -28, duration: 0.62 }, 0.38);
   };
 
+  // Opacity or filter on [data-hero-stage] would make it a backdrop root and
+  // cut the plates' liquid-glass refraction off until the tween ends, so the
+  // refraction popped in (visibly darker) one frame after the entrance. The
+  // stage therefore only animates transforms; the fade runs on the individual
+  // pieces, whose own opacity dims the refracted backdrop along with them.
+  // Plates keep per-element CSS opacity (.plate-back is 0.55), so record the
+  // natural values to fade back to instead of assuming 1.
+  const stageFadeTargets = gsap.utils.toArray(
+    "[data-hero-stage] .precision-frame, [data-hero-stage] .glass-plate"
+  );
+  const stageFadeAlpha = new Map(
+    stageFadeTargets.map((el) => [el, Number(gsap.getProperty(el, "opacity"))])
+  );
+  const fadeInStagePieces = (timeline, at) => {
+    stageFadeTargets.forEach((el, index) => {
+      timeline.fromTo(
+        el,
+        { autoAlpha: 0 },
+        {
+          autoAlpha: stageFadeAlpha.get(el),
+          duration: 0.85,
+          immediateRender: true,
+          clearProps: "opacity,visibility",
+        },
+        at + index * 0.09
+      );
+    });
+  };
+
   const playPageEntrance = () => {
     if (pageEntrancePlayed) return;
 
     pageEntrancePlayed = true;
 
     if (shouldPlayIntro) {
-      gsap
+      const entrance = gsap
         .timeline({ defaults: { ease: "power3.out" } })
         .fromTo(
           "[data-animate='header']",
@@ -144,21 +173,12 @@
         )
         .fromTo(
           "[data-hero-stage]",
-          { rotateX: 7, rotateY: -13, z: -80, autoAlpha: 0, filter: "blur(14px)" },
-          {
-            rotateX: 0,
-            rotateY: 0,
-            z: 0,
-            autoAlpha: 1,
-            filter: "blur(0px)",
-            duration: 1,
-            immediateRender: true,
-            // A leftover inline filter (even blur(0px)) turns the stage into a
-            // backdrop root and cuts the glass plates off from the scene behind.
-            clearProps: "filter",
-          },
+          { rotateX: 7, rotateY: -13, z: -80 },
+          { rotateX: 0, rotateY: 0, z: 0, duration: 1, immediateRender: true },
           0.22
         );
+
+      fadeInStagePieces(entrance, 0.3);
       return;
     }
 
@@ -180,13 +200,11 @@
       rotateX: 7,
       rotateY: -13,
       z: -70,
-      autoAlpha: 0,
-      filter: "blur(12px)",
       duration: 1.05,
       ease: "power3.out",
       delay: 0.2,
-      clearProps: "filter",
     });
+    fadeInStagePieces(gsap.timeline({ defaults: { ease: "power3.out" } }), 0.26);
   };
 
   const finishIntro = () => {
@@ -213,13 +231,8 @@
     root.classList.add("intro-active");
     gsap.set("[data-animate='header']", { y: -28, autoAlpha: 0 });
     gsap.set("[data-hero-copy]", { y: 30, autoAlpha: 0, filter: "blur(14px)" });
-    gsap.set("[data-hero-stage]", {
-      rotateX: 7,
-      rotateY: -13,
-      z: -80,
-      autoAlpha: 0,
-      filter: "blur(14px)",
-    });
+    gsap.set("[data-hero-stage]", { rotateX: 7, rotateY: -13, z: -80 });
+    gsap.set(stageFadeTargets, { autoAlpha: 0 });
   } else if (intro) {
     intro.hidden = true;
     intro.setAttribute("aria-hidden", "true");
